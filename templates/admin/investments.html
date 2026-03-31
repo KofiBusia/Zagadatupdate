@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}Investments — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Investment Holdings</h1>
+      <p>{{ investments|length }} record(s)</p>
+    </div>
+    {% if current_user.has_permission('enter_investment') %}
+    <a href="{{ url_for('admin.new_investment') }}" class="btn btn-primary">+ New Investment</a>
+    {% endif %}
+  </div>
+
+  <form method="GET" style="display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap;">
+    <input name="q" value="{{ q }}" placeholder="Search account, security, issuer…"
+           style="flex:1;min-width:200px;background:var(--surface);border:1px solid var(--border);
+                  border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+    <select name="asset_class" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+      <option value="">All Asset Classes</option>
+      {% for cls in ['MONEY_MARKET','GOVT_SECURITIES','BONDS','EUROBONDS','GSE_EQUITIES','GLOBAL_EQUITIES','PRIVATE_EQUITY','PRIVATE_DEBT','MUTUAL_FUNDS'] %}
+      <option value="{{ cls }}" {{ 'selected' if asset_class==cls }}>{{ cls.replace('_',' ') }}</option>
+      {% endfor %}
+    </select>
+    <select name="status" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+      <option value="">All Statuses</option>
+      <option value="APPROVED" {{ 'selected' if status=='APPROVED' }}>Approved</option>
+      <option value="PENDING" {{ 'selected' if status=='PENDING' }}>Pending</option>
+    </select>
+    <button type="submit" class="btn btn-secondary">Filter</button>
+    <a href="{{ url_for('admin.investments') }}" class="btn btn-secondary">Clear</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Account</th><th>Asset Class</th><th>Security</th><th>Issuer</th>
+          <th>Trade Date</th><th>Maturity</th><th>Days to Mat.</th>
+          <th class="text-right">Rate/Cpn%</th>
+          <th class="text-right">Face/Qty</th>
+          <th class="text-right">Mkt Value</th>
+          <th>Status</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in investments %}
+        <tr>
+          <td class="mono"><a href="{{ url_for('admin.view_account', acc_id=inv.account.id) }}" style="color:var(--gold);text-decoration:none;">{{ inv.account_number }}</a></td>
+          <td><span class="badge badge-pending">{{ inv.asset_class.replace('_',' ') }}</span></td>
+          <td>{{ (inv.security_name or inv.sub_type or '—')[:30] }}</td>
+          <td style="color:var(--grey);">{{ inv.issuer or '—' }}</td>
+          <td class="mono">{{ inv.trade_date.strftime('%d %b %Y') if inv.trade_date else '—' }}</td>
+          <td class="mono">{{ inv.maturity_date.strftime('%d %b %Y') if inv.maturity_date else '—' }}</td>
+          <td class="num">{% if inv.days_to_maturity is not none %}{{ inv.days_to_maturity }}{% else %}—{% endif %}</td>
+          <td class="num">{{ "{:.2f}".format(inv.coupon_rate or inv.interest_rate or 0) }}%</td>
+          <td class="num">{{ "{:,.2f}".format(inv.face_value or inv.quantity or 0) }}</td>
+          <td class="num text-gold">{{ "{:,.2f}".format(inv.computed_mkt_value) }}</td>
+          <td><span class="badge badge-{{ 'approved' if inv.status=='APPROVED' else 'pending' }}">{{ inv.status }}</span></td>
+          <td>
+            <div class="flex gap-1">
+              <a href="{{ url_for('admin.edit_investment', inv_id=inv.id) }}" class="btn btn-secondary btn-sm">Edit</a>
+              {% if inv.status == 'PENDING' and current_user.has_permission('approve_investment') %}
+              <form method="POST" action="{{ url_for('admin.approve_investment', inv_id=inv.id) }}" style="display:inline;">
+                <button class="btn btn-success btn-sm">✓</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="12" style="text-align:center;color:var(--grey);padding:3rem;">No investments found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

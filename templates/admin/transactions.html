@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}Transactions — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>All Transactions</h1><p>{{ transactions|length }} records</p></div>
+    <a href="{{ url_for('admin.new_transaction') }}" class="btn btn-primary">+ New Transaction</a>
+  </div>
+  <form method="GET" style="display:flex;gap:10px;margin-bottom:1.5rem;">
+    <input name="q" value="{{ q }}" placeholder="Search account number…"
+           style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+    <button type="submit" class="btn btn-secondary">Search</button>
+    <a href="{{ url_for('admin.transactions') }}" class="btn btn-secondary">Clear</a>
+  </form>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>Date</th><th>Account</th><th>Type</th><th>Description</th><th>Reference</th><th>Currency</th><th class="text-right">Amount</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {% for t in transactions %}
+        <tr>
+          <td class="mono">{{ t.txn_date.strftime('%d %b %Y') }}</td>
+          <td class="mono"><a href="{{ url_for('admin.view_account', acc_id=t.account.id) }}" style="color:var(--gold);text-decoration:none;">{{ t.account_number }}</a></td>
+          <td><span class="badge badge-{{ 'approved' if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON'] else 'pending' }}">{{ t.txn_type }}</span></td>
+          <td style="color:var(--grey);">{{ t.description or '—' }}</td>
+          <td class="mono" style="color:var(--grey);">{{ t.reference or '—' }}</td>
+          <td class="mono">{{ t.currency }}</td>
+          <td class="num {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}text-green{% else %}text-red{% endif %}">
+            {{ '+ ' if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] else '- ' }}{{ "{:,.2f}".format(t.amount) }}
+          </td>
+          <td><span class="badge badge-approved">{{ t.status }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:var(--grey);padding:3rem;">No transactions found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Data Migration — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Data Migration</h1><p>Super Admin only — import legacy data</p></div>
+  </div>
+
+  <div class="grid grid-2 mb-2">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:1rem;">Upload Migration File</div>
+      <form method="POST" enctype="multipart/form-data">
+        <div class="form-group mb-2">
+          <label>Migration Type</label>
+          <select name="migrate_type">
+            <option value="accounts">Client Accounts</option>
+            <option value="transactions">Transactions</option>
+          </select>
+        </div>
+        <div class="form-group mb-2">
+          <label>CSV File</label>
+          <input type="file" name="file" accept=".csv" required style="background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--white);padding:8px;font-size:13px;">
+        </div>
+        <div class="flex gap-1">
+          <button type="submit" class="btn btn-primary">Upload & Migrate</button>
+        </div>
+      </form>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:1rem;">Download Templates</div>
+      <p style="font-size:12px;color:var(--grey);margin-bottom:1rem;">Download CSV templates to prepare your data for migration.</p>
+      <div class="flex gap-1" style="flex-direction:column;">
+        <a href="{{ url_for('admin.migration_template', template_type='accounts') }}" class="btn btn-secondary">↓ Accounts Template (CSV)</a>
+        <a href="{{ url_for('admin.migration_template', template_type='transactions') }}" class="btn btn-secondary">↓ Transactions Template (CSV)</a>
+      </div>
+      <div style="margin-top:1rem;padding:1rem;background:rgba(201,168,76,0.05);border:1px solid var(--border);border-radius:6px;">
+        <p style="font-size:11px;color:var(--grey);line-height:1.8;">
+          <strong style="color:var(--gold);">Accounts CSV columns:</strong><br>
+          account_number, full_name, phone, email, account_type, country
+        </p>
+        <p style="font-size:11px;color:var(--grey);line-height:1.8;margin-top:8px;">
+          <strong style="color:var(--gold);">Transactions CSV columns:</strong><br>
+          account_number, txn_date (YYYY-MM-DD), txn_type, description, amount, currency, reference
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MIGRATION HISTORY -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:1rem;">Migration History</div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Date</th><th>File</th><th>Records In</th><th>Successful</th><th>Errors</th><th>Status</th><th>Executed By</th></tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td class="mono">{{ log.executed_at.strftime('%d %b %Y %H:%M') }}</td>
+            <td>{{ log.filename or '—' }}</td>
+            <td class="num">{{ log.records_in }}</td>
+            <td class="num text-green">{{ log.records_ok }}</td>
+            <td class="num text-red">{{ log.records_err }}</td>
+            <td><span class="badge badge-{{ 'approved' if log.status=='COMPLETED' else 'pending' }}">{{ log.status }}</span></td>
+            <td class="mono">ID:{{ log.executed_by }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;color:var(--grey);padding:2rem;">No migrations yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

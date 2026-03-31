@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Statement — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Transaction Statement</h1><p>{{ acc.account_number }} · {{ acc.full_name }}</p></div>
+    <div class="flex gap-1">
+      <a href="{{ url_for('reports.statement', account_number=acc.account_number) }}" target="_blank" class="btn btn-secondary btn-sm">👁 View PDF</a>
+      <a href="{{ url_for('reports.statement', account_number=acc.account_number) }}?download=1" class="btn btn-primary btn-sm">↓ Download PDF</a>
+      <a href="{{ url_for('user.dashboard') }}" class="btn btn-secondary btn-sm">← Portfolio</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Date</th><th>Type</th><th>Description</th><th>Reference</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right">Balance</th></tr>
+        </thead>
+        <tbody>
+          {% set bal = namespace(v=0) %}
+          {% for t in transactions %}
+          {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}{% set bal.v = bal.v + t.amount %}{% else %}{% set bal.v = bal.v - t.amount %}{% endif %}
+          <tr>
+            <td class="mono">{{ t.txn_date.strftime('%d %b %Y') }}</td>
+            <td><span class="badge badge-{{ 'approved' if t.txn_type in ['DEPOSIT','TRANSFER_IN'] else 'pending' }}">{{ t.txn_type }}</span></td>
+            <td style="color:var(--grey);">{{ t.description or '—' }}</td>
+            <td class="mono" style="color:var(--grey);">{{ t.reference or '—' }}</td>
+            {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}
+            <td class="num">—</td><td class="num text-green">{{ "{:,.2f}".format(t.amount) }}</td>
+            {% else %}
+            <td class="num text-red">{{ "{:,.2f}".format(t.amount) }}</td><td class="num">—</td>
+            {% endif %}
+            <td class="num" style="{{ 'color:var(--green)' if bal.v >= 0 else 'color:var(--red)' }}">{{ "{:,.2f}".format(bal.v) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;color:var(--grey);padding:2rem;">No transactions on record.</td></tr>
+          {% endfor %}
+          {% if transactions %}
+          <tr style="background:rgba(201,168,76,0.08);">
+            <td colspan="5" style="font-weight:600;color:var(--gold);padding:10px 12px;">CLOSING BALANCE</td>
+            <td></td>
+            <td class="num" style="font-weight:700;color:var(--gold);">{{ "{:,.2f}".format(bal.v) }}</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

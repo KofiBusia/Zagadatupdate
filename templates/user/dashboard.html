@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% block title %}My Portfolio — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>My Portfolio</h1>
+      <p>{{ acc.account_number }} &middot; {{ acc.account_type }} &middot;
+         <span class="badge badge-{{ 'approved' if acc.status=='APPROVED' else 'pending' }}">{{ acc.status }}</span>
+      </p>
+    </div>
+    <div class="flex gap-1">
+      <a href="{{ url_for('reports.pvr', account_number=acc.account_number) }}" target="_blank" class="btn btn-secondary btn-sm">📄 GHS Report</a>
+      <a href="{{ url_for('reports.pvr', account_number=acc.account_number, currency='USD') }}" target="_blank" class="btn btn-secondary btn-sm">📄 USD</a>
+      <a href="{{ url_for('reports.pvr', account_number=acc.account_number) }}?download=1" class="btn btn-primary btn-sm">↓ Download PDF</a>
+    </div>
+  </div>
+
+  <!-- KPI -->
+  <div class="grid grid-4 mb-2">
+    <div class="card" style="border-top:2px solid var(--gold);">
+      <div class="card-title">Total Portfolio</div>
+      <div class="stat-value gold-value">{{ "{:,.2f}".format(portfolio_value) }}</div>
+      <div class="stat-sub">{{ acc.base_currency }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Investments</div>
+      <div class="stat-value">{{ "{:,.2f}".format(total_value) }}</div>
+      <div class="stat-sub">{{ investments|length }} holdings</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cash Balance</div>
+      <div class="stat-value">{{ "{:,.2f}".format(cash) }}</div>
+      <div class="stat-sub">Available for investment</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Risk Profile</div>
+      <div class="stat-value" style="font-size:1.3rem;">{{ acc.risk_profile or 'Not set' }}</div>
+      <div class="stat-sub">{{ acc.investment_objective or '—' }}</div>
+    </div>
+  </div>
+
+  {% if not acc.signature_path or not acc.id_document_path %}
+  <div class="alert alert-info mb-2">
+    ⚠ Your account setup is incomplete. Please
+    <a href="{{ url_for('user.profile') }}" style="color:var(--gold);">upload your signature and ID document</a>
+    to fully activate your account.
+  </div>
+  {% endif %}
+
+  <div class="grid grid-2 mb-2">
+    <!-- ALLOCATION CHART -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:1rem;">Asset Allocation</div>
+      {% if by_class %}
+      {% set tot = namespace(v=portfolio_value) %}
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        {% for cls, val in by_class.items()|sort(attribute='1', reverse=true) %}
+        {% set pct = (val / tot.v * 100) if tot.v else 0 %}
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+            <span style="color:var(--grey);">{{ cls }}</span>
+            <span class="mono">{{ "{:,.2f}".format(val) }} ({{ "{:.1f}".format(pct) }}%)</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.06);border-radius:3px;height:6px;">
+            <div style="background:var(--gold);width:{{ pct }}%;height:100%;border-radius:3px;"></div>
+          </div>
+        </div>
+        {% endfor %}
+        {% set cpct = (cash / tot.v * 100) if tot.v else 0 %}
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+            <span style="color:var(--grey);">Cash</span>
+            <span class="mono">{{ "{:,.2f}".format(cash) }} ({{ "{:.1f}".format(cpct) }}%)</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.06);border-radius:3px;height:6px;">
+            <div style="background:#3498DB;width:{{ cpct }}%;height:100%;border-radius:3px;"></div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <p style="color:var(--grey);font-size:12px;">No investments yet. Submit an investment request below.</p>
+      {% endif %}
+    </div>
+
+    <!-- QUICK ACTIONS + PENDING REQUESTS -->
+    <div style="display:flex;flex-direction:column;gap:1rem;">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:0.8rem;">Quick Actions</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <a href="{{ url_for('user.requests_page') }}" class="btn btn-primary btn-sm">+ New Request</a>
+          <a href="{{ url_for('user.statement') }}" class="btn btn-secondary btn-sm">Statement</a>
+          <a href="{{ url_for('user.profile') }}" class="btn btn-secondary btn-sm">Profile</a>
+          <a href="{{ url_for('reports.pvr', account_number=acc.account_number) }}?download=1" class="btn btn-secondary btn-sm">↓ PDF Report</a>
+        </div>
+      </div>
+      {% if requests %}
+      <div class="card">
+        <div class="card-title" style="margin-bottom:0.8rem;">Recent Requests</div>
+        {% for r in requests %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+          <span style="font-size:12px;">{{ r.request_type }}</span>
+          <span class="badge badge-{{ 'approved' if r.status=='APPROVED' else 'rejected' if r.status=='REJECTED' else 'pending' }}">{{ r.status }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- HOLDINGS -->
+  {% if investments %}
+  <div class="card mb-2">
+    <div class="card-title" style="margin-bottom:1rem;">Investment Holdings</div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Asset Class</th><th>Security</th><th>Issuer</th><th>Trade Date</th><th>Maturity</th><th class="text-right">Rate%</th><th class="text-right">Market Value</th></tr>
+        </thead>
+        <tbody>
+          {% for inv in investments %}
+          <tr>
+            <td><span class="badge badge-pending">{{ inv.asset_class.replace('_',' ') }}</span></td>
+            <td>{{ inv.security_name or inv.sub_type or '&mdash;' }}</td>
+            <td style="color:var(--grey);">{{ inv.issuer or '&mdash;' }}</td>
+            <td class="mono">{{ inv.trade_date.strftime('%d %b %Y') if inv.trade_date else '&mdash;' }}</td>
+            <td class="mono">{{ inv.maturity_date.strftime('%d %b %Y') if inv.maturity_date else '&mdash;' }}</td>
+            <td class="num">{{ "{:.2f}".format(inv.coupon_rate or inv.interest_rate or 0) }}%</td>
+            <td class="num text-gold">{{ "{:,.2f}".format(inv.computed_mkt_value) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- RECENT TRANSACTIONS -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+      <div class="card-title">Recent Transactions</div>
+      <a href="{{ url_for('user.statement') }}" style="font-size:11px;color:var(--gold);text-decoration:none;">Full Statement →</a>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="text-right">Debit</th><th class="text-right">Credit</th></tr></thead>
+        <tbody>
+          {% for t in transactions %}
+          <tr>
+            <td class="mono">{{ t.txn_date.strftime('%d %b %Y') }}</td>
+            <td><span class="badge badge-{{ 'approved' if t.txn_type in ['DEPOSIT','TRANSFER_IN'] else 'pending' }}">{{ t.txn_type }}</span></td>
+            <td style="color:var(--grey);">{{ t.description or '&mdash;' }}</td>
+            {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}
+            <td class="num">&mdash;</td><td class="num text-green">{{ "{:,.2f}".format(t.amount) }}</td>
+            {% else %}
+            <td class="num text-red">{{ "{:,.2f}".format(t.amount) }}</td><td class="num">&mdash;</td>
+            {% endif %}
+          </tr>
+          {% else %}
+          <tr><td colspan="5" style="text-align:center;color:var(--grey);padding:2rem;">No transactions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% block title %}Report Centre — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Report Centre</h1><p>Generate and download professional reports</p></div>
+  </div>
+
+  <!-- INDIVIDUAL PVR -->
+  <div class="card mb-2">
+    <div class="card-title" style="margin-bottom:1rem;">Portfolio Valuation Report (PVR) — Individual Account</div>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+      <div class="form-group" style="flex:1;min-width:250px;">
+        <label>Select Account</label>
+        <select id="pvr-acc" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;width:100%;">
+          <option value="">— Select Account —</option>
+          {% for acc in accounts %}
+          <option value="{{ acc.account_number }}">{{ acc.account_number }} — {{ acc.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Currency</label>
+        <select id="pvr-cur" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+          <option value="GHS">GHS — Ghanaian Cedi</option>
+          <option value="USD">USD — US Dollar</option>
+          <option value="EUR">EUR — Euro</option>
+          <option value="GBP">GBP — British Pound</option>
+          <option value="CNY">CNY — Chinese Yuan</option>
+          <option value="NGN">NGN — Nigerian Naira</option>
+        </select>
+      </div>
+      <div class="flex gap-1">
+        <button onclick="viewPVR()" class="btn btn-secondary">👁 View</button>
+        <button onclick="downloadPVR()" class="btn btn-primary">↓ Download PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSACTION STATEMENT -->
+  <div class="card mb-2">
+    <div class="card-title" style="margin-bottom:1rem;">Transaction Statement</div>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+      <div class="form-group" style="flex:1;min-width:250px;">
+        <label>Select Account</label>
+        <select id="stmt-acc" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;width:100%;">
+          <option value="">— Select Account —</option>
+          {% for acc in accounts %}
+          <option value="{{ acc.account_number }}">{{ acc.account_number }} — {{ acc.full_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>From Date</label>
+        <input type="date" id="stmt-from" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+      </div>
+      <div class="form-group">
+        <label>To Date</label>
+        <input type="date" id="stmt-to" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+      </div>
+      <div class="flex gap-1">
+        <button onclick="viewStatement()" class="btn btn-secondary">👁 View</button>
+        <button onclick="downloadStatement()" class="btn btn-primary">↓ Download PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GLOBAL REPORTS -->
+  <div class="card mb-2">
+    <div class="card-title" style="margin-bottom:1rem;">Global / System-Wide Reports</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <a href="{{ url_for('reports.global_report') }}" target="_blank" class="btn btn-secondary">📊 Global AUM Report (All)</a>
+      {% for cls in ['MONEY_MARKET','GOVT_SECURITIES','BONDS','EUROBONDS','GSE_EQUITIES','GLOBAL_EQUITIES','PRIVATE_EQUITY','PRIVATE_DEBT','MUTUAL_FUNDS'] %}
+      <a href="{{ url_for('reports.global_report', asset_class=cls) }}" target="_blank" class="btn btn-secondary btn-sm">{{ cls.replace('_',' ') }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- REPORT DESCRIPTIONS -->
+  <div class="grid grid-3">
+    {% set report_types = [
+      ('Portfolio Valuation Report (PVR)', 'Full breakdown of all holdings for a single account — Money Market, T-Bills, Bonds, Equities, PE, PD, Mutual Funds. Available in any currency.'),
+      ('Transaction Statement', 'Chronological cash flow statement with running balance for any date range.'),
+      ('Global AUM Report', 'System-wide summary across all client accounts by asset class, with account breakdown.'),
+      ('Asset Class Reports', 'Drill down by T-Bills, Bonds, GSE Equities, Global Equities, etc. for the whole book.'),
+      ('SEC Placement Report', 'NPRA / SEC compliant placement format showing all investments by sector.'),
+      ('Interconnectedness Report', 'NPRA-format inflow/outflow FUM report for regulatory submission.'),
+    ] %}
+    {% for title, desc in report_types %}
+    <div class="card">
+      <div class="card-title" style="margin-bottom:0.5rem;">{{ title }}</div>
+      <p style="font-size:12px;color:var(--grey);line-height:1.7;">{{ desc }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+function viewPVR() {
+  const acc = document.getElementById('pvr-acc').value;
+  const cur = document.getElementById('pvr-cur').value;
+  if (!acc) { alert('Please select an account'); return; }
+  window.open(`/reports/pvr/${acc}?currency=${cur}`, '_blank');
+}
+function downloadPVR() {
+  const acc = document.getElementById('pvr-acc').value;
+  const cur = document.getElementById('pvr-cur').value;
+  if (!acc) { alert('Please select an account'); return; }
+  window.location.href = `/reports/pvr/${acc}?currency=${cur}&download=1`;
+}
+function viewStatement() {
+  const acc = document.getElementById('stmt-acc').value;
+  const from = document.getElementById('stmt-from').value;
+  const to   = document.getElementById('stmt-to').value;
+  if (!acc) { alert('Please select an account'); return; }
+  let url = `/reports/statement/${acc}?`;
+  if (from) url += `from=${from}&`;
+  if (to)   url += `to=${to}`;
+  window.open(url, '_blank');
+}
+function downloadStatement() {
+  const acc = document.getElementById('stmt-acc').value;
+  const from = document.getElementById('stmt-from').value;
+  const to   = document.getElementById('stmt-to').value;
+  if (!acc) { alert('Please select an account'); return; }
+  let url = `/reports/statement/${acc}?download=1&`;
+  if (from) url += `from=${from}&`;
+  if (to)   url += `to=${to}`;
+  window.location.href = url;
+}
+// Set default to date
+document.getElementById('stmt-to').valueAsDate = new Date();
+</script>
+{% endblock %}

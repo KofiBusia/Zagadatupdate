@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Audit Log — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>System Audit Log</h1><p>Full trail of all admin and client actions</p></div>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th><th>Actor</th><th>Type</th>
+            <th>Action</th><th>Target</th><th>Detail</th><th>IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td class="mono" style="font-size:11px;white-space:nowrap;">{{ log.created_at.strftime('%d %b %Y %H:%M:%S') }}</td>
+            <td>
+              <div style="font-size:12px;">{{ log.actor_name }}</div>
+              <div style="font-size:10px;color:var(--grey);">{{ log.actor_type }}</div>
+            </td>
+            <td>
+              <span class="badge badge-{{ 'approved' if log.actor_type=='admin' else 'pending' }}">
+                {{ log.actor_type.upper() }}
+              </span>
+            </td>
+            <td style="font-size:12px;color:var(--gold);">{{ log.action }}</td>
+            <td style="font-size:11px;color:var(--grey);">{{ log.target or '—' }}</td>
+            <td style="font-size:11px;color:var(--grey);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ log.detail or '—' }}</td>
+            <td class="mono" style="font-size:10px;color:var(--grey);">{{ log.ip_address or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;color:var(--grey);padding:3rem;">No audit records yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

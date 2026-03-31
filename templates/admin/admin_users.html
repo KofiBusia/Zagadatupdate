@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Staff Management — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Staff Management</h1><p>{{ users|length }} staff members</p></div>
+    <a href="{{ url_for('admin.new_admin_user') }}" class="btn btn-primary">+ Add Staff</a>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr><th>Staff ID</th><th>Full Name</th><th>Email</th><th>Role</th><th>RM</th><th>Status</th><th>Last Login</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td class="mono text-gold">{{ u.staff_id }}</td>
+          <td>{{ u.full_name }}</td>
+          <td style="color:var(--grey);">{{ u.email }}</td>
+          <td><span class="badge badge-{{ 'approved' if u.role=='SUPER_ADMIN' else 'pending' }}">{{ u.role.replace('_',' ') }}</span></td>
+          <td>
+            {% if u.is_rm %}<span class="badge badge-approved">RM {{ "{:.1f}".format(u.rm_commission_rate) }}%</span>
+            {% else %}<span style="color:var(--grey);font-size:11px;">—</span>{% endif %}
+          </td>
+          <td><span class="badge badge-{{ 'approved' if u.is_active else 'rejected' }}">{{ 'Active' if u.is_active else 'Inactive' }}</span></td>
+          <td class="mono" style="color:var(--grey);font-size:11px;">{{ u.last_login.strftime('%d %b %Y %H:%M') if u.last_login else '—' }}</td>
+          <td>
+            {% if u.id != current_user.id %}
+            <form method="POST" action="{{ url_for('admin.toggle_admin_user', user_id=u.id) }}" style="display:inline;">
+              <button class="btn btn-secondary btn-sm">{{ 'Deactivate' if u.is_active else 'Activate' }}</button>
+            </form>
+            {% else %}
+            <span style="font-size:11px;color:var(--gold);">← You</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

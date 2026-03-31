@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% block title %}{{ acc.full_name }} — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>{{ acc.full_name }}</h1>
+      <p>{{ acc.account_number }} · {{ acc.account_type }} · {{ acc.status }}</p>
+    </div>
+    <div class="flex gap-1">
+      <a href="{{ url_for('admin.edit_account', acc_id=acc.id) }}" class="btn btn-secondary btn-sm">Edit</a>
+      {% for cur in ['GHS','USD','EUR','GBP','CNY','NGN'] %}
+      <a href="{{ url_for('reports.pvr', account_number=acc.account_number, currency=cur) }}"
+         target="_blank" class="btn btn-secondary btn-sm">PDF {{ cur }}</a>
+      {% endfor %}
+      <a href="{{ url_for('reports.statement', account_number=acc.account_number) }}"
+         target="_blank" class="btn btn-primary btn-sm">Statement</a>
+      {% if current_user.has_permission('approve_account') %}
+      <a href="{{ url_for('admin.assign_fee', acc_id=acc.id) }}" class="btn btn-secondary btn-sm">💰 Fees</a>
+      {% if acc.status == 'PENDING' %}
+      <form method="POST" action="{{ url_for('admin.approve_account', acc_id=acc.id) }}" style="display:inline;">
+        <button class="btn btn-success btn-sm">✓ Approve</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin.reject_account', acc_id=acc.id) }}" style="display:inline;"
+            onsubmit="const r=prompt('Rejection reason:');if(!r)return false;this.querySelector('[name=reason]').value=r;">
+        <input type="hidden" name="reason" value="">
+        <button class="btn btn-danger btn-sm">✕ Reject</button>
+      </form>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- SUMMARY CARDS -->
+  {% set total_inv = namespace(v=0) %}
+  {% for i in investments %}{% set total_inv.v = total_inv.v + i.computed_mkt_value %}{% endfor %}
+  {% set cash = acc.cash_balance %}
+  <div class="grid grid-4 mb-2">
+    <div class="card">
+      <div class="card-title">Portfolio Value</div>
+      <div class="stat-value gold-value">{{ "{:,.2f}".format(total_inv.v + cash) }}</div>
+      <div class="stat-sub">{{ acc.base_currency }}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Investments</div>
+      <div class="stat-value">{{ "{:,.2f}".format(total_inv.v) }}</div>
+      <div class="stat-sub">{{ investments|length }} holdings</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cash Balance</div>
+      <div class="stat-value">{{ "{:,.2f}".format(cash) }}</div>
+      <div class="stat-sub">Available for investment</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Account Type</div>
+      <div class="stat-value" style="font-size:1.2rem;">{{ acc.account_type }}</div>
+      <div class="stat-sub">{{ acc.risk_profile or 'Risk not set' }}</div>
+    </div>
+  </div>
+
+  <!-- ACCOUNT INFO -->
+  <div class="grid grid-2 mb-2">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:1rem;">Account Details</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        {% set rows = [
+          ('Phone', acc.phone), ('Email', acc.email or '—'),
+          ('Country', acc.country or '—'), ('City', acc.city or '—'),
+          ('Custodian', acc.custodian or '—'), ('Currency', acc.base_currency),
+          ('Regulatory Body', acc.regulatory_body or '—'), ('Fund Type', acc.fund_type or '—'),
+          ('Investment Objective', acc.investment_objective or '—'),
+          ('Risk Profile', acc.risk_profile or '—'),
+          ('Mandate', acc.mandate or '—'),
+          ('RM', acc.relationship_manager.full_name if acc.relationship_manager else '—'),
+          ('Mgmt Fee Rate', ('{:.2f}%'.format(acc.management_fee_rate)) if acc.management_fee_rate else '—'),
+          ('AML Status', acc.aml_status or '—'),
+          ('PEP', 'Yes' if acc.is_pep else 'No'),
+        ] %}
+        {% for label, val in rows %}
+        <tr>
+          <td style="color:var(--grey);padding:5px 0;width:45%;">{{ label }}</td>
+          <td style="color:var(--white);">{{ val }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:1rem;">Nominee / Next of Kin</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        {% set rows2 = [
+          ('Name', acc.nominee_name or '—'),
+          ('Phone', acc.nominee_phone or '—'),
+          ('Relationship', acc.nominee_relation or '—'),
+        ] %}
+        {% for label, val in rows2 %}
+        <tr>
+          <td style="color:var(--grey);padding:5px 0;width:45%;">{{ label }}</td>
+          <td style="color:var(--white);">{{ val }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      <hr class="divider">
+      <div class="card-title" style="margin-bottom:0.5rem;">New Transaction</div>
+      <div class="flex gap-1">
+        <a href="{{ url_for('admin.new_transaction') }}?acc={{ acc.account_number }}" class="btn btn-primary btn-sm">+ Deposit / Withdrawal</a>
+        <a href="{{ url_for('admin.new_investment') }}?acc={{ acc.account_number }}" class="btn btn-secondary btn-sm">+ Investment</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVESTMENTS -->
+  <div class="card mb-2">
+    <div class="card-title" style="margin-bottom:1rem;">Investment Holdings</div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Asset Class</th><th>Security</th><th>Issuer</th>
+            <th>Trade Date</th><th>Maturity</th>
+            <th class="text-right">Face / Qty</th>
+            <th class="text-right">Rate / Cpn%</th>
+            <th class="text-right">Mkt Value (GHS)</th>
+            <th>Status</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for inv in investments %}
+          <tr>
+            <td><span class="badge badge-pending">{{ inv.asset_class.replace('_',' ') }}</span></td>
+            <td>{{ inv.security_name or inv.sub_type or '—' }}</td>
+            <td style="color:var(--grey);">{{ inv.issuer or '—' }}</td>
+            <td class="mono">{{ inv.trade_date.strftime('%d %b %Y') if inv.trade_date else '—' }}</td>
+            <td class="mono">{{ inv.maturity_date.strftime('%d %b %Y') if inv.maturity_date else '—' }}</td>
+            <td class="num">{{ "{:,.2f}".format(inv.face_value or inv.quantity or 0) }}</td>
+            <td class="num">{{ "{:.2f}".format(inv.coupon_rate or inv.interest_rate or 0) }}%</td>
+            <td class="num text-gold">{{ "{:,.2f}".format(inv.computed_mkt_value) }}</td>
+            <td><span class="badge badge-{{ 'approved' if inv.status=='APPROVED' else 'pending' }}">{{ inv.status }}</span></td>
+            <td>
+              <a href="{{ url_for('admin.edit_investment', inv_id=inv.id) }}" class="btn btn-secondary btn-sm">Edit</a>
+              {% if inv.status == 'PENDING' and current_user.has_permission('approve_investment') %}
+              <form method="POST" action="{{ url_for('admin.approve_investment', inv_id=inv.id) }}" style="display:inline;">
+                <button type="submit" class="btn btn-success btn-sm">Approve</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="10" style="text-align:center;color:var(--grey);padding:2rem;">No investments found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TRANSACTIONS -->
+  <div class="card">
+    <div class="card-title" style="margin-bottom:1rem;">Transaction History</div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>Date</th><th>Type</th><th>Description</th><th>Reference</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right">Balance</th></tr>
+        </thead>
+        <tbody>
+          {% set balance = namespace(v=0) %}
+          {% for t in transactions|reverse %}
+            {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}
+              {% set balance.v = balance.v + t.amount %}
+            {% else %}
+              {% set balance.v = balance.v - t.amount %}
+            {% endif %}
+          {% endfor %}
+          {% set running = namespace(v=0) %}
+          {% for t in transactions %}
+          {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}
+            {% set running.v = running.v + t.amount %}
+          {% else %}
+            {% set running.v = running.v - t.amount %}
+          {% endif %}
+          <tr>
+            <td class="mono">{{ t.txn_date.strftime('%d %b %Y') }}</td>
+            <td><span class="badge badge-{{ 'approved' if t.txn_type in ['DEPOSIT','TRANSFER_IN'] else 'pending' }}">{{ t.txn_type }}</span></td>
+            <td style="color:var(--grey);">{{ t.description or '—' }}</td>
+            <td class="mono" style="color:var(--grey);">{{ t.reference or '—' }}</td>
+            {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}
+            <td class="num">—</td>
+            <td class="num text-green">{{ "{:,.2f}".format(t.amount) }}</td>
+            {% else %}
+            <td class="num text-red">{{ "{:,.2f}".format(t.amount) }}</td>
+            <td class="num">—</td>
+            {% endif %}
+            <td class="num">{{ "{:,.2f}".format(running.v) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="7" style="text-align:center;color:var(--grey);padding:2rem;">No transactions.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

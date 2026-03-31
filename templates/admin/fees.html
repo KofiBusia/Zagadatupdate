@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Fees Management — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Fees Management</h1><p>Track and manage client fee structures</p></div>
+  </div>
+
+  <!-- SUMMARY CARDS -->
+  <div class="grid grid-4 mb-2">
+    <div class="card">
+      <div class="card-title">Total Fees Earned</div>
+      <div class="stat-value gold-value">GHS {{ "{:,.2f}".format(total_earned) }}</div>
+      <div class="stat-sub">All time applied fees</div>
+    </div>
+    {% for name, amt in by_type.items() %}
+    <div class="card">
+      <div class="card-title">{{ name }}</div>
+      <div class="stat-value" style="font-size:1.4rem;">GHS {{ "{:,.2f}".format(amt) }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="grid grid-2 mb-2">
+    <!-- Fee Types -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:1rem;">Fee Types</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Description</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for ft in fee_types %}
+            <tr>
+              <td class="text-gold">{{ ft.name }}</td>
+              <td style="color:var(--grey);font-size:11px;">{{ ft.description or '—' }}</td>
+              <td><span class="badge badge-approved">Active</span></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" style="text-align:center;color:var(--grey);">No fee types yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <hr class="divider">
+      <div class="card-title" style="margin-bottom:0.8rem;">Add New Fee Type</div>
+      <form method="POST" action="{{ url_for('admin.new_fee_type') }}" style="display:flex;flex-direction:column;gap:8px;">
+        <input type="text" name="name" placeholder="e.g. Administration Fee" required
+               style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+        <input type="text" name="description" placeholder="Short description"
+               style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+        <button type="submit" class="btn btn-primary btn-sm">+ Add Fee Type</button>
+      </form>
+    </div>
+
+    <!-- Recent Charges -->
+    <div class="card">
+      <div class="card-title" style="margin-bottom:1rem;">Recent Fee Charges</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Account</th><th>Fee Type</th><th>AUM</th><th class="text-right">Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            {% for f in recent_fees %}
+            <tr>
+              <td class="mono">{{ f.created_at.strftime('%d %b %Y') }}</td>
+              <td class="mono text-gold">{{ f.account_number }}</td>
+              <td>{{ f.fee_type.name if f.fee_type else '—' }}</td>
+              <td class="num" style="color:var(--grey);">{{ "{:,.0f}".format(f.aum_at_time or 0) }}</td>
+              <td class="num text-gold">{{ "{:,.2f}".format(f.amount) }}</td>
+              <td><span class="badge badge-approved">{{ f.status }}</span></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="text-align:center;color:var(--grey);">No fees charged yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

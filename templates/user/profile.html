@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% block title %}My Profile — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>My Profile</h1><p>{{ acc.account_number }} · {{ acc.full_name }}</p></div>
+    <div class="flex gap-1">
+      <a href="{{ url_for('user.dashboard') }}" class="btn btn-secondary btn-sm">← Portfolio</a>
+    </div>
+  </div>
+
+  {% if not acc.signature_path or not acc.id_document_path %}
+  <div class="alert alert-info" style="margin-bottom:1.5rem;">
+    ⚠ Please upload your <strong>Signature</strong> and <strong>ID Document</strong> to complete your account setup.
+  </div>
+  {% endif %}
+
+  <form method="POST" enctype="multipart/form-data">
+  <!-- DOCUMENTS -->
+  <div class="form-section">
+    <h3>📎 Documents & Verification</h3>
+    <div class="form-grid form-grid-2">
+      <div class="form-group">
+        <label>Passport Photo</label>
+        {% if acc.passport_photo_path %}
+        <p style="font-size:11px;color:var(--green);">✓ Uploaded</p>
+        {% endif %}
+        <input type="file" name="passport_photo" accept="image/*" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px;font-size:12px;">
+        <span style="font-size:10px;color:var(--grey);">JPG, PNG — max 10MB</span>
+      </div>
+      <div class="form-group">
+        <label>Valid ID Document</label>
+        {% if acc.id_document_path %}
+        <p style="font-size:11px;color:var(--green);">✓ Uploaded</p>
+        {% endif %}
+        <input type="file" name="id_document" accept="image/*,.pdf" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px;font-size:12px;">
+        <span style="font-size:10px;color:var(--grey);">Ghana Card, Passport, Voter ID — PDF or image</span>
+      </div>
+    </div>
+
+    <!-- SIGNATURE CAPTURE -->
+    <div class="form-group" style="margin-top:1rem;">
+      <label>Specimen Signature</label>
+      {% if acc.signature_path %}
+      <p style="font-size:11px;color:var(--green);">✓ Signature on file</p>
+      {% endif %}
+      <p style="font-size:12px;color:var(--grey);margin-bottom:8px;">Draw your signature below, or upload an image of your signature.</p>
+      <canvas id="sig-canvas" width="500" height="150"
+              style="background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:6px;cursor:crosshair;touch-action:none;display:block;max-width:100%;"></canvas>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <button type="button" onclick="clearSig()" class="btn btn-secondary btn-sm">Clear</button>
+        <button type="button" onclick="saveSig()" class="btn btn-primary btn-sm">Use This Signature</button>
+      </div>
+      <input type="hidden" name="signature_data" id="sig-data">
+      <div style="margin-top:8px;"><em style="font-size:11px;color:var(--grey);">— or upload a signature image —</em></div>
+      <input type="file" name="signature" accept="image/*" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px;font-size:12px;margin-top:6px;">
+    </div>
+  </div>
+
+  <!-- CONTACT UPDATE -->
+  <div class="form-section">
+    <h3>Contact & Bank Details</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Secondary Phone</label><input type="text" name="phone2" value="{{ acc.phone2 or '' }}"></div>
+      <div class="form-group"><label>Postal Address</label><input type="text" name="postal_address" value="{{ acc.postal_address or '' }}"></div>
+      <div class="form-group"><label>GhanaPost GPS</label><input type="text" name="digital_address" value="{{ acc.digital_address or '' }}" placeholder="GA-000-0000"></div>
+      <div class="form-group"><label>Residential Address</label><input type="text" name="address" value="{{ acc.address or '' }}"></div>
+      <div class="form-group"><label>City</label><input type="text" name="city" value="{{ acc.city or '' }}"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Bank Name</label><input type="text" name="bank_name" value="{{ acc.bank_name or '' }}"></div>
+      <div class="form-group"><label>Bank Branch</label><input type="text" name="bank_branch" value="{{ acc.bank_branch or '' }}"></div>
+      <div class="form-group"><label>Account Name</label><input type="text" name="bank_account_name" value="{{ acc.bank_account_name or '' }}"></div>
+      <div class="form-group"><label>Account Number</label><input type="text" name="bank_account_number" value="{{ acc.bank_account_number or '' }}"></div>
+    </div>
+  </div>
+
+  <!-- FAMILY & EMERGENCY -->
+  <div class="form-section">
+    <h3>Spouse & Emergency Contact</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Spouse Name</label><input type="text" name="spouse_name" value="{{ acc.spouse_name or '' }}"></div>
+      <div class="form-group"><label>Spouse Phone</label><input type="text" name="spouse_phone" value="{{ acc.spouse_phone or '' }}"></div>
+      <div class="form-group"><label>Emergency Contact Name</label><input type="text" name="emergency_contact_name" value="{{ acc.emergency_contact_name or '' }}"></div>
+      <div class="form-group"><label>Relationship</label><input type="text" name="emergency_contact_relation" value="{{ acc.emergency_contact_relation or '' }}"></div>
+      <div class="form-group"><label>Emergency Phone</label><input type="text" name="emergency_contact_phone" value="{{ acc.emergency_contact_phone or '' }}"></div>
+    </div>
+  </div>
+
+  <!-- PREFERENCES -->
+  <div class="form-section">
+    <h3>Statement & Dividend Preferences</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Statement Delivery</label>
+        <select name="statement_mode">
+          <option value="Email" {{ 'selected' if acc.statement_mode=='Email' }}>Email</option>
+          <option value="Collection" {{ 'selected' if acc.statement_mode=='Collection' }}>Collection</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Statement Frequency</label>
+        <select name="statement_frequency">
+          <option value="Quarterly" {{ 'selected' if acc.statement_frequency=='Quarterly' }}>Quarterly</option>
+          <option value="Monthly" {{ 'selected' if acc.statement_frequency=='Monthly' }}>Monthly</option>
+          <option value="Annual" {{ 'selected' if acc.statement_frequency=='Annual' }}>Annual</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Dividend Preference</label>
+        <select name="dividend_reinvest">
+          <option value="" {{ 'selected' if not acc.dividend_reinvest }}>Send dividends to me</option>
+          <option value="1" {{ 'selected' if acc.dividend_reinvest }}>Re-invest dividends</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex gap-2" style="justify-content:flex-end;">
+    <button type="submit" class="btn btn-primary">Save Profile</button>
+  </div>
+  </form>
+</div>
+
+<script>
+// ── SIGNATURE PAD ──────────────────────────────────────────────────────────
+const canvas = document.getElementById('sig-canvas');
+const ctx = canvas.getContext('2d');
+let drawing = false;
+ctx.strokeStyle = '#C9A84C';
+ctx.lineWidth = 2;
+ctx.lineCap = 'round';
+
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  if (e.touches) {
+    return {
+      x: (e.touches[0].clientX - rect.left) * scaleX,
+      y: (e.touches[0].clientY - rect.top) * scaleY
+    };
+  }
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+canvas.addEventListener('mousedown', (e) => { drawing = true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+canvas.addEventListener('mousemove', (e) => { if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); });
+canvas.addEventListener('mouseup', () => drawing = false);
+canvas.addEventListener('mouseleave', () => drawing = false);
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); drawing = true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+canvas.addEventListener('touchmove', (e) => { e.preventDefault(); if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); });
+canvas.addEventListener('touchend', () => drawing = false);
+
+function clearSig() { ctx.clearRect(0,0,canvas.width,canvas.height); }
+function saveSig() {
+  document.getElementById('sig-data').value = canvas.toDataURL('image/png');
+  alert('Signature captured! Submit the form to save.');
+}
+</script>
+{% endblock %}

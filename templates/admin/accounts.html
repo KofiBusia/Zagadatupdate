@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Accounts — Zagadat Capital{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Client Accounts</h1>
+      <p>{{ accounts|length }} account(s) found</p>
+    </div>
+    {% if current_user.has_permission('create_account') %}
+    <a href="{{ url_for('admin.new_account') }}" class="btn btn-primary">+ New Account</a>
+    {% endif %}
+  </div>
+
+  <!-- FILTERS -->
+  <form method="GET" style="display:flex;gap:10px;margin-bottom:1.5rem;flex-wrap:wrap;">
+    <input name="q" value="{{ q }}" placeholder="Search name, account, phone…"
+           style="flex:1;min-width:200px;background:var(--surface);border:1px solid var(--border);
+                  border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+    <select name="status" style="background:var(--surface);border:1px solid var(--border);
+            border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
+      <option value="">All Statuses</option>
+      <option value="APPROVED" {{ 'selected' if status=='APPROVED' }}>Approved</option>
+      <option value="PENDING" {{ 'selected' if status=='PENDING' }}>Pending</option>
+      <option value="SUSPENDED" {{ 'selected' if status=='SUSPENDED' }}>Suspended</option>
+    </select>
+    <button type="submit" class="btn btn-secondary">Search</button>
+    <a href="{{ url_for('admin.accounts') }}" class="btn btn-secondary">Clear</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Account No.</th><th>Client Name</th><th>Type</th>
+          <th>Phone</th><th>Country</th><th>Currency</th>
+          <th>Status</th><th>Created</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for acc in accounts %}
+        <tr>
+          <td class="mono text-gold">
+            <a href="{{ url_for('admin.view_account', acc_id=acc.id) }}"
+               style="color:var(--gold);text-decoration:none;">{{ acc.account_number }}</a>
+          </td>
+          <td>{{ acc.full_name }}</td>
+          <td><span class="badge badge-pending">{{ acc.account_type }}</span></td>
+          <td class="mono">{{ acc.phone }}</td>
+          <td>{{ acc.country or '—' }}</td>
+          <td class="mono">{{ acc.base_currency }}</td>
+          <td>
+            <span class="badge badge-{{ 'approved' if acc.status=='APPROVED' else 'pending' if acc.status=='PENDING' else 'rejected' }}">
+              {{ acc.status }}
+            </span>
+          </td>
+          <td class="mono" style="color:var(--grey);">{{ acc.created_at.strftime('%d %b %Y') if acc.created_at else '—' }}</td>
+          <td>
+            <div class="flex gap-1">
+              <a href="{{ url_for('admin.view_account', acc_id=acc.id) }}" class="btn btn-secondary btn-sm">View</a>
+              {% if current_user.has_permission('create_account') %}
+              <a href="{{ url_for('admin.edit_account', acc_id=acc.id) }}" class="btn btn-secondary btn-sm">Edit</a>
+              {% endif %}
+              {% if acc.status == 'PENDING' and current_user.has_permission('approve_account') %}
+              <form method="POST" action="{{ url_for('admin.approve_account', acc_id=acc.id) }}" style="display:inline;">
+                <button type="submit" class="btn btn-success btn-sm">Approve</button>
+              </form>
+              {% endif %}
+              <a href="{{ url_for('reports.pvr', account_number=acc.account_number) }}"
+                 target="_blank" class="btn btn-secondary btn-sm">📄 PVR</a>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" style="text-align:center;color:var(--grey);padding:3rem;">No accounts found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

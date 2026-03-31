@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Assign Fee — {{ acc.full_name }}{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div><h1>Assign Fee</h1><p>{{ acc.account_number }} — {{ acc.full_name }}</p></div>
+    <a href="{{ url_for('admin.view_account', acc_id=acc.id) }}" class="btn btn-secondary">← Back</a>
+  </div>
+
+  <!-- EXISTING FEES -->
+  {% if acc.fees %}
+  <div class="card mb-2">
+    <div class="card-title" style="margin-bottom:1rem;">Current Fee Structure</div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Fee Type</th><th>Rate (%)</th><th>Frequency</th><th>Effective Date</th><th>Charge Now</th></tr></thead>
+        <tbody>
+          {% for f in acc.fees %}
+          <tr>
+            <td class="text-gold">{{ f.fee_type.name if f.fee_type else '—' }}</td>
+            <td class="num">{{ "{:.4f}".format(f.rate) }}%</td>
+            <td>{{ f.frequency }}</td>
+            <td class="mono">{{ f.effective_date.strftime('%d %b %Y') if f.effective_date else '—' }}</td>
+            <td>
+              <form method="POST" action="{{ url_for('admin.charge_fee', acc_id=acc.id) }}" style="display:inline;">
+                <input type="hidden" name="fee_type_id" value="{{ f.fee_type_id }}">
+                <input type="hidden" name="fee_name" value="{{ f.fee_type.name if f.fee_type else '' }}">
+                <input type="hidden" name="rate" value="{{ f.rate }}">
+                <input type="date" name="period_from" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:4px;color:var(--white);padding:4px 8px;font-size:11px;outline:none;" placeholder="From">
+                <input type="date" name="period_to" style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:4px;color:var(--white);padding:4px 8px;font-size:11px;outline:none;" placeholder="To">
+                <button type="submit" class="btn btn-primary btn-sm">Charge</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ASSIGN NEW FEE -->
+  <div class="card" style="max-width:500px;">
+    <div class="card-title" style="margin-bottom:1rem;">Assign / Update Fee</div>
+    <form method="POST">
+      <div class="form-group mb-2">
+        <label>Fee Type *</label>
+        <select name="fee_type_id" required>
+          <option value="">— Select Fee Type —</option>
+          {% for ft in fee_types %}
+          <option value="{{ ft.id }}">{{ ft.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group mb-2">
+        <label>Rate (% per annum) *</label>
+        <input type="number" step="0.0001" name="rate" required placeholder="e.g. 2.0000"
+               style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:10px 14px;font-size:13px;outline:none;width:100%;">
+      </div>
+      <div class="form-group mb-2">
+        <label>Frequency</label>
+        <select name="frequency">
+          <option value="Quarterly">Quarterly</option>
+          <option value="Monthly">Monthly</option>
+          <option value="Annual">Annual</option>
+        </select>
+      </div>
+      <div style="background:rgba(201,168,76,0.06);border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:1rem;font-size:12px;color:var(--grey);">
+        Current AUM: <strong style="color:var(--gold);">GHS {{ "{:,.2f}".format(acc.total_portfolio_value) }}</strong><br>
+        Example: 2% annual = <strong style="color:var(--gold);">GHS {{ "{:,.2f}".format(acc.total_portfolio_value * 0.02) }}</strong> per year
+      </div>
+      <button type="submit" class="btn btn-primary">Assign Fee</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
