@@ -1,4 +1,4 @@
-from extensions import db, login_manager, bcrypt
+﻿from extensions import db, login_manager, bcrypt
 from flask_login import UserMixin
 from datetime import datetime, date
 
@@ -98,6 +98,10 @@ class ClientAccount(db.Model):
     id_issue_date   = db.Column(db.Date, nullable=True)
     id_expiry_date  = db.Column(db.Date, nullable=True)
     id_place_of_issue = db.Column(db.String(80), nullable=True)
+    # Ghana Card (NIA) & Nationality
+    ghana_card_number = db.Column(db.String(30), nullable=True)   # GHA-000000000-0
+    is_ghanaian       = db.Column(db.Boolean, default=True)        # Ghanaian vs foreign national
+    height            = db.Column(db.String(20), nullable=True)   # e.g. 1.75m (manual entry)
     # Permit
     permit_number   = db.Column(db.String(60), nullable=True)
     permit_issue_date = db.Column(db.Date, nullable=True)
@@ -213,14 +217,40 @@ class ClientAccount(db.Model):
 
     @property
     def cash_balance(self):
+        """
+        Cash balance in account base currency (default GHS).
+        Only APPROVED transactions count.
+        Uses amount_ghs if available (for non-GHS transactions), otherwise amount.
+        """
         total = 0.0
         for t in self.transactions:
             if t.status == 'APPROVED':
+                ghs_amt = t.amount_ghs if t.amount_ghs is not None else t.amount
                 if t.txn_type in ('DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'):
-                    total += t.amount
+                    total += ghs_amt
                 else:
-                    total -= t.amount
+                    total -= ghs_amt
+        return max(0.0, total)  # Cash cannot go below 0
+
+    @property
+    def pending_deposits(self):
+        """Sum of pending deposit/topup requests."""
+        from models import ClientRequest
+        total = 0.0
+        for r in ClientRequest.query.filter_by(
+                account_number=self.account_number, status='PENDING').all():
+            if r.request_type in ('DEPOSIT','TOPUP'):
+                total += (r.amount or 0)
         return total
+
+    @property
+    def kyc_complete(self):
+        """True when the minimum KYC fields are present."""
+        return bool(
+            self.id_document_path and
+            self.signature_path and
+            self.bank_account_number
+        )
 
     @property
     def total_investment_value(self):
@@ -239,11 +269,17 @@ class ClientUser(UserMixin, db.Model):
     is_active      = db.Column(db.Boolean, default=True)
     last_login     = db.Column(db.DateTime, nullable=True)
     signup_name    = db.Column(db.String(150), nullable=True)
+    # Face ID â€” stores a JSON-encoded 128-dim face descriptor vector (computed in browser)
+    # No raw face images are stored; only the mathematical representation.
+    face_descriptor = db.Column(db.Text, nullable=True)
+    face_enrolled_at = db.Column(db.DateTime, nullable=True)
     account = db.relationship('ClientAccount', foreign_keys=[account_number],
                                primaryjoin='ClientUser.account_number == ClientAccount.account_number')
     def get_id(self): return str(self.id)
     def set_password(self, pw): self.password_hash = bcrypt.generate_password_hash(pw).decode('utf-8')
     def check_password(self, pw): return bcrypt.check_password_hash(self.password_hash, pw)
+    @property
+    def has_face_id(self): return bool(self.face_descriptor)
 
 class JointAccountHolder(db.Model):
     __tablename__ = 'joint_account_holders'
@@ -353,10 +389,15 @@ class Transaction(db.Model):
     txn_date       = db.Column(db.Date, nullable=False)
     txn_type       = db.Column(db.String(40), nullable=False)
     description    = db.Column(db.String(255), nullable=True)
-    amount         = db.Column(db.Float, nullable=False)
+    amount         = db.Column(db.Float, nullable=False)     # amount in original currency
+    amount_ghs     = db.Column(db.Float, nullable=True)      # GHS equivalent (auto-computed on approval)
+    fx_rate_used   = db.Column(db.Float, nullable=True)      # FX rate applied at time of entry
     currency       = db.Column(db.String(10), default='GHS')
     reference      = db.Column(db.String(80), nullable=True)
-    status         = db.Column(db.String(20), default='APPROVED')
+    status         = db.Column(db.String(20), default='PENDING')  # PENDING â†’ APPROVED | REJECTED
+    approved_by    = db.Column(db.Integer, nullable=True)
+    approved_at    = db.Column(db.DateTime, nullable=True)
+    rejection_note = db.Column(db.String(255), nullable=True)
     created_by     = db.Column(db.Integer, nullable=True)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
     investment_id  = db.Column(db.Integer, db.ForeignKey('investments.id'), nullable=True)
@@ -418,24 +459,61 @@ class Investment(db.Model):
 
     @property
     def days_to_maturity(self):
-        return max(0, (self.maturity_date - date.today()).days) if self.maturity_date else None
+        if self.maturity_date:
+            return max(0, (self.maturity_date - date.today()).days)
+        # Fallback: estimate from tenor
+        if self.tenor and self.trade_date:
+            if self.asset_class in ('BONDS','EUROBONDS','PRIVATE_DEBT'):
+                # tenor stored in years
+                try:
+                    from dateutil.relativedelta import relativedelta
+                    est_mat = self.trade_date + relativedelta(years=int(self.tenor))
+                except Exception:
+                    from datetime import timedelta
+                    est_mat = self.trade_date + timedelta(days=int(self.tenor * 365))
+                return max(0, (est_mat - date.today()).days)
+            elif self.asset_class in ('GOVT_SECURITIES','MONEY_MARKET'):
+                # tenor stored in days
+                from datetime import timedelta
+                est_mat = self.trade_date + timedelta(days=int(self.tenor))
+                return max(0, (est_mat - date.today()).days)
+        return None
 
     @property
     def accrued_interest(self):
-        if self.asset_class in ('GOVT_SECURITIES','BONDS','EUROBONDS') and self.face_value and self.coupon_rate:
-            basis = 364 if (self.sub_type and 'BILL' in self.sub_type.upper()) else 365
-            ref   = self.last_coupon_date or self.trade_date
-            days  = (date.today() - ref).days if ref else 0
-            return (self.face_value * (self.coupon_rate / 100) * days) / basis
+        if self.asset_class in ('GOVT_SECURITIES','BONDS','EUROBONDS'):
+            if self.face_value and (self.coupon_rate or self.interest_rate):
+                rate  = self.coupon_rate or self.interest_rate or 0
+                basis = 364 if (self.sub_type and ('BILL' in (self.sub_type or '').upper() or
+                                                    'T-BILL' in (self.sub_type or '').upper())) else 365
+                ref   = self.last_coupon_date or self.trade_date
+                days  = (date.today() - ref).days if ref else 0
+                return (self.face_value * (rate / 100) * days) / basis
+        elif self.asset_class == 'MONEY_MARKET':
+            # Accrued simple interest on principal
+            if self.face_value and self.interest_rate and self.trade_date:
+                days = (date.today() - self.trade_date).days
+                return self.face_value * (self.interest_rate / 100) * days / 365
+        elif self.asset_class == 'PRIVATE_DEBT':
+            if self.outstanding and self.coupon_rate and self.trade_date:
+                days = (date.today() - self.trade_date).days
+                return (self.outstanding or self.total_cost or 0) * (self.coupon_rate / 100) * days / 365
         return 0.0
 
     @property
     def computed_mkt_value(self):
         if self.asset_class == 'GOVT_SECURITIES':
-            if self.face_value and self.interest_rate and self.tenor:
+            if self.face_value and self.interest_rate:
                 basis = 364 if (self.sub_type and 'BILL' in self.sub_type.upper()) else 365
-                d2m = self.days_to_maturity or 0
-                return self.face_value / (1 + (self.interest_rate/100) * d2m / basis)
+                # Prefer maturity_date for d2m; fall back to stored tenor (days)
+                if self.maturity_date:
+                    d2m = max(0, (self.maturity_date - date.today()).days)
+                elif self.tenor:
+                    d2m = max(0, self.tenor - self.days_run)
+                else:
+                    d2m = 0
+                if d2m >= 0 and (self.interest_rate or 0) > 0:
+                    return self.face_value / (1 + (self.interest_rate/100) * d2m / basis)
             return self.total_cost or 0
         elif self.asset_class in ('BONDS','EUROBONDS'):
             if self.face_value and self.clean_price:
@@ -446,10 +524,13 @@ class Investment(db.Model):
                 return self.quantity * self.current_price
             return self.total_cost or 0
         elif self.asset_class == 'MONEY_MARKET':
-            return (self.total_cost or 0) + self.accrued_interest
+            # Principal + accrued interest to date
+            principal = self.face_value or self.total_cost or 0
+            return principal + self.accrued_interest
         elif self.asset_class == 'PRIVATE_EQUITY':
             return self.nav or self.total_cost or 0
         elif self.asset_class == 'PRIVATE_DEBT':
+            # Outstanding principal balance (accrued interest shown separately in reports)
             return self.outstanding or self.total_cost or 0
         elif self.asset_class == 'MUTUAL_FUNDS':
             if self.quantity and self.current_price:
@@ -496,3 +577,164 @@ class EmailLog(db.Model):
     status = db.Column(db.String(20), default='SENT')
     error = db.Column(db.Text, nullable=True)
     sent_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# â”€â”€ SEC REGULATORY REPORT MODELS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+SEC_CLIENT_TYPES = [
+    'Local-Institution',
+    'Local-Retail',
+    'Foreign-Institution',
+    'Foreign-Retail',
+]
+
+SEC_CLIENT_CLASSIFICATIONS = [
+    'Male',
+    'Female',
+    'Joint',
+    'Institutional',
+]
+
+SEC_PORTFOLIO_SECURITIES = [
+    '91 Day Treasury Bills',
+    '182 Day Treasury Bills',
+    '1-2 Year Notes',
+    '3-5 Year Bonds',
+    '5+ Year Bonds',
+    'GoG Euro Bonds (value in GHS)',
+    'Local Listed Corporate Bonds',
+    'Foreign Listed Corporate Bonds',
+    'Local Unlisted Corporate Bonds',
+    'Foreign Unlisted Corporate Bonds',
+    'Commercial Paper',
+    'Local Listed Equity',
+    'Local Unlisted Equity',
+    'Foreign Listed Equity',
+    'Foreign Unlisted Equity',
+    'Preference Shares',
+    'Venture Capital',
+    'CIS',
+    'REIT',
+    'Cash Balance',
+    'Bank Balance',
+    'Call Investment',
+    'Fixed Deposit',
+    'Others',
+]
+
+SEC_REGULATORY_BODIES = [
+    'Securities & Exchange Commission',
+    'Bank of Ghana',
+    'National Insurance Commission',
+    'National Pension Regulatory Authority',
+    'Social Institutions',
+    'Individual & Joint Account Corporate Others',
+]
+
+
+class SECReport(db.Model):
+    __tablename__ = 'sec_reports'
+    id           = db.Column(db.Integer, primary_key=True)
+    year         = db.Column(db.Integer, nullable=False)
+    quarter      = db.Column(db.String(2), nullable=False)   # Q1 Q2 Q3 Q4
+    status       = db.Column(db.String(20), default='DRAFT') # DRAFT SUBMITTED
+    created_by   = db.Column(db.Integer, nullable=True)
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at   = db.Column(db.DateTime, default=datetime.utcnow)
+    submitted_at = db.Column(db.DateTime, nullable=True)
+    notes        = db.Column(db.Text, nullable=True)
+
+    client_type_rows   = db.relationship('SECClientTypeRow',   backref='report', lazy=True, cascade='all,delete-orphan')
+    client_class_rows  = db.relationship('SECClientClassRow',  backref='report', lazy=True, cascade='all,delete-orphan')
+    portfolio_holdings = db.relationship('SECPortfolioHolding',backref='report', lazy=True, cascade='all,delete-orphan')
+    cis_inflows        = db.relationship('SECCISInflow',       backref='report', lazy=True, cascade='all,delete-orphan')
+    cis_outflows       = db.relationship('SECCISOutflow',      backref='report', lazy=True, cascade='all,delete-orphan')
+
+    @property
+    def label(self):
+        return f'{self.quarter} {self.year}'
+
+
+class SECClientTypeRow(db.Model):
+    __tablename__ = 'sec_client_type_rows'
+    id                  = db.Column(db.Integer, primary_key=True)
+    report_id           = db.Column(db.Integer, db.ForeignKey('sec_reports.id'), nullable=False)
+    client_type         = db.Column(db.String(40), nullable=False)
+    no_clients          = db.Column(db.Integer,  default=0)
+    htm_value           = db.Column(db.Float,    default=0.0)
+    mtm_value           = db.Column(db.Float,    default=0.0)
+    value_redemption    = db.Column(db.Float,    default=0.0)
+    value_subscription  = db.Column(db.Float,    default=0.0)
+    effective_mgt_fees  = db.Column(db.Float,    default=0.0)
+
+
+class SECClientClassRow(db.Model):
+    __tablename__ = 'sec_client_class_rows'
+    id                  = db.Column(db.Integer, primary_key=True)
+    report_id           = db.Column(db.Integer, db.ForeignKey('sec_reports.id'), nullable=False)
+    classification      = db.Column(db.String(30), nullable=False)
+    no_clients          = db.Column(db.Integer,  default=0)
+    htm_value           = db.Column(db.Float,    default=0.0)
+    mtm_value           = db.Column(db.Float,    default=0.0)
+    value_redemption    = db.Column(db.Float,    default=0.0)
+    value_subscription  = db.Column(db.Float,    default=0.0)
+    effective_mgt_fees  = db.Column(db.Float,    default=0.0)
+
+
+class SECPortfolioHolding(db.Model):
+    __tablename__ = 'sec_portfolio_holdings'
+    id            = db.Column(db.Integer, primary_key=True)
+    report_id     = db.Column(db.Integer, db.ForeignKey('sec_reports.id'), nullable=False)
+    security_type = db.Column(db.String(80), nullable=False)
+    current_htm   = db.Column(db.Float, default=0.0)
+    previous_htm  = db.Column(db.Float, default=0.0)
+
+
+class SECCISInflow(db.Model):
+    __tablename__ = 'sec_cis_inflow'
+    id                = db.Column(db.Integer, primary_key=True)
+    report_id         = db.Column(db.Integer, db.ForeignKey('sec_reports.id'), nullable=False)
+    regulatory_body   = db.Column(db.String(80), nullable=False)
+    customer_category = db.Column(db.String(80), nullable=True)
+    no_clients        = db.Column(db.Integer, default=0)
+    beginning_fum     = db.Column(db.Float,   default=0.0)
+    total_inflow      = db.Column(db.Float,   default=0.0)
+    total_outflow     = db.Column(db.Float,   default=0.0)
+    total_gains_loss  = db.Column(db.Float,   default=0.0)
+    created_at        = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def net_inflow_outflow(self):
+        return (self.total_inflow or 0) - (self.total_outflow or 0)
+
+    @property
+    def balance_fum(self):
+        return ((self.beginning_fum or 0)
+                + (self.total_inflow or 0)
+                - (self.total_outflow or 0)
+                + (self.total_gains_loss or 0))
+
+
+class SECCISOutflow(db.Model):
+    __tablename__ = 'sec_cis_outflow'
+    id                    = db.Column(db.Integer, primary_key=True)
+    report_id             = db.Column(db.Integer, db.ForeignKey('sec_reports.id'), nullable=False)
+    regulatory_body       = db.Column(db.String(80), nullable=False)
+    customer_category     = db.Column(db.String(80), nullable=True)
+    total_fum_beginning   = db.Column(db.Float, default=0.0)
+    fund_outflow          = db.Column(db.Float, default=0.0)
+    total_repayments      = db.Column(db.Float, default=0.0)
+    gains_loss            = db.Column(db.Float, default=0.0)
+    created_at            = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def net_inflow_outflow(self):
+        return (self.total_repayments or 0) - (self.fund_outflow or 0)
+
+    @property
+    def total_fum_end(self):
+        return ((self.total_fum_beginning or 0)
+                - (self.fund_outflow or 0)
+                + (self.total_repayments or 0)
+                + (self.gains_loss or 0))
+
