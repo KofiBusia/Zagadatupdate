@@ -244,6 +244,13 @@ def approve_transaction(txn_id):
         flash('Transaction is not in PENDING status.', 'error')
         return redirect(request.referrer or url_for('admin.transactions'))
 
+    # ── Maker-checker: entrant cannot approve their own entry ─────────
+    if not current_user.is_super_admin and txn.created_by == current_user.id:
+        flash('Maker-checker violation: you cannot approve a transaction you entered. '
+              'Another authorised staff member must approve it.', 'error')
+        return redirect(request.referrer or url_for('admin.view_account', acc_id=acc.id))
+    # ─────────────────────────────────────────────────────────────────
+
     # For outflows: validate sufficient approved cash balance
     outflow_types = ('WITHDRAWAL', 'TRANSFER_OUT', 'FEE', 'BUY')
     if txn.txn_type in outflow_types:
@@ -291,6 +298,13 @@ def reject_transaction(txn_id):
     if txn.status != 'PENDING':
         flash('Transaction is not in PENDING status.', 'error')
         return redirect(request.referrer or url_for('admin.transactions'))
+
+    # ── Maker-checker ─────────────────────────────────────────────────
+    if not current_user.is_super_admin and txn.created_by == current_user.id:
+        flash('Maker-checker violation: you cannot reject a transaction you entered.', 'error')
+        return redirect(request.referrer or url_for('admin.transactions'))
+    # ─────────────────────────────────────────────────────────────────
+
     note = request.form.get('note', '')
     txn.status         = 'REJECTED'
     txn.rejection_note = note
@@ -312,6 +326,14 @@ def reject_transaction(txn_id):
 @permission_required('approve_account')
 def approve_account(acc_id):
     acc = ClientAccount.query.get_or_404(acc_id)
+
+    # ── Maker-checker ─────────────────────────────────────────────────
+    if not current_user.is_super_admin and acc.created_by == current_user.id:
+        flash('Maker-checker violation: you cannot approve an account you created. '
+              'Another authorised staff member must approve it.', 'error')
+        return redirect(url_for('admin.accounts'))
+    # ─────────────────────────────────────────────────────────────────
+
     acc.status = 'APPROVED'
     acc.approved_by = current_user.id
     acc.approved_at = datetime.utcnow()
@@ -601,6 +623,13 @@ def approve_investment(inv_id):
     """
     inv = Investment.query.get_or_404(inv_id)
     acc = ClientAccount.query.filter_by(account_number=inv.account_number).first()
+
+    # ── Maker-checker ─────────────────────────────────────────────────
+    if not current_user.is_super_admin and inv.created_by == current_user.id:
+        flash('Maker-checker violation: you cannot approve an investment you entered. '
+              'Another authorised staff member must approve it.', 'error')
+        return redirect(request.referrer or url_for('admin.investments'))
+    # ─────────────────────────────────────────────────────────────────
 
     # Find linked BUY transaction
     buy_txn = Transaction.query.filter_by(

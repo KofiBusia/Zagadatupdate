@@ -50,14 +50,22 @@
       {% if current_user.has_permission('approve_account') %}
       <a href="{{ url_for('admin.assign_fee', acc_id=acc.id) }}" class="btn btn-secondary btn-sm">💰 Fees</a>
       {% if acc.status == 'PENDING' %}
-      <form method="POST" action="{{ url_for('admin.approve_account', acc_id=acc.id) }}" style="display:inline;">
-        <button class="btn btn-success btn-sm">✓ Approve Account</button>
-      </form>
-      <form method="POST" action="{{ url_for('admin.reject_account', acc_id=acc.id) }}" style="display:inline;"
-            onsubmit="const r=prompt('Rejection reason:');if(!r)return false;this.querySelector('[name=reason]').value=r;">
-        <input type="hidden" name="reason" value="">
-        <button class="btn btn-danger btn-sm">✕ Reject</button>
-      </form>
+        {% set is_own_entry = (not current_user.is_super_admin) and (acc.created_by == current_user.id) %}
+        {% if is_own_entry %}
+        <span class="btn btn-secondary btn-sm" style="opacity:.45;cursor:not-allowed;"
+              title="Maker-checker: you created this account — another approver must sign it off.">
+          🔒 Approve Account
+        </span>
+        {% else %}
+        <form method="POST" action="{{ url_for('admin.approve_account', acc_id=acc.id) }}" style="display:inline;">
+          <button class="btn btn-success btn-sm">✓ Approve Account</button>
+        </form>
+        <form method="POST" action="{{ url_for('admin.reject_account', acc_id=acc.id) }}" style="display:inline;"
+              onsubmit="const r=prompt('Rejection reason:');if(!r)return false;this.querySelector('[name=reason]').value=r;">
+          <input type="hidden" name="reason" value="">
+          <button class="btn btn-danger btn-sm">✕ Reject</button>
+        </form>
+        {% endif %}
       {% endif %}
       {% endif %}
     </div>
@@ -229,14 +237,19 @@
           </td>
           <td>
             {% if current_user.has_permission('approve_investment') %}
-            <form method="POST" action="{{ url_for('admin.approve_transaction', txn_id=t.id) }}" style="display:inline;">
-              <button type="submit" class="btn btn-success btn-sm" style="font-size:10px;padding:3px 10px;">✓ Approve</button>
-            </form>
-            <form method="POST" action="{{ url_for('admin.reject_transaction', txn_id=t.id) }}" style="display:inline;"
-                  onsubmit="const n=prompt('Reason:');if(!n)return false;this.querySelector('[name=note]').value=n;">
-              <input type="hidden" name="note" value="">
-              <button type="submit" class="btn btn-danger btn-sm" style="font-size:10px;padding:3px 10px;">✕</button>
-            </form>
+              {% if (not current_user.is_super_admin) and t.created_by == current_user.id %}
+              <span title="Maker-checker: you entered this transaction — another approver must sign it off."
+                    style="font-size:10px;color:var(--grey);">🔒 Awaiting 2nd approver</span>
+              {% else %}
+              <form method="POST" action="{{ url_for('admin.approve_transaction', txn_id=t.id) }}" style="display:inline;">
+                <button type="submit" class="btn btn-success btn-sm" style="font-size:10px;padding:3px 10px;">✓ Approve</button>
+              </form>
+              <form method="POST" action="{{ url_for('admin.reject_transaction', txn_id=t.id) }}" style="display:inline;"
+                    onsubmit="const n=prompt('Reason:');if(!n)return false;this.querySelector('[name=note]').value=n;">
+                <input type="hidden" name="note" value="">
+                <button type="submit" class="btn btn-danger btn-sm" style="font-size:10px;padding:3px 10px;">✕</button>
+              </form>
+              {% endif %}
             {% endif %}
           </td>
         </tr>
@@ -271,11 +284,16 @@
           </td>
           <td>
             {% if current_user.has_permission('approve_investment') %}
-            <form method="POST" action="{{ url_for('admin.approve_investment', inv_id=inv.id) }}" style="display:inline;">
-              <button type="submit" class="btn btn-success btn-sm" style="font-size:10px;">✓ Approve</button>
-            </form>
-            <a href="{{ url_for('admin.edit_investment', inv_id=inv.id) }}"
-               class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
+              {% if (not current_user.is_super_admin) and inv.created_by == current_user.id %}
+              <span title="Maker-checker: you entered this investment — another approver must sign it off."
+                    style="font-size:10px;color:var(--grey);">🔒 Awaiting 2nd approver</span>
+              {% else %}
+              <form method="POST" action="{{ url_for('admin.approve_investment', inv_id=inv.id) }}" style="display:inline;">
+                <button type="submit" class="btn btn-success btn-sm" style="font-size:10px;">✓ Approve</button>
+              </form>
+              {% endif %}
+              <a href="{{ url_for('admin.edit_investment', inv_id=inv.id) }}"
+                 class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
             {% endif %}
           </td>
         </tr>
