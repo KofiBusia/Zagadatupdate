@@ -2,20 +2,17 @@
 {% block title %}{{ 'Edit' if investment else 'New' }} Investment — Zagadat Capital{% endblock %}
 {% block extra_css %}
 <style>
-.asset-panel { display: none; }
-.asset-panel.active { display: block; }
-.calc-result {
-  background: rgba(201,168,76,0.08);
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 10px 14px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--gold);
-  margin-top: 6px;
-}
-.calc-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-.calc-row span:first-child { color: var(--grey); }
+.asset-panel{display:none;} .asset-panel.active{display:block;}
+.calc-box{background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.3);
+  border-radius:7px;padding:12px 16px;font-family:var(--font-mono);font-size:12px;
+  color:var(--gold);margin-top:8px;}
+.calc-row{display:flex;justify-content:space-between;margin-bottom:3px;font-size:12px;}
+.calc-row span:first-child{color:var(--grey);}
+.calc-row span:last-child{font-weight:700;}
+.auto-field { background:rgba(39,174,96,.07)!important; border-color:rgba(39,174,96,.35)!important; color:#5DD890!important; }
+.req-field:invalid{border-color:rgba(231,76,60,.5);}
+.cash-banner{padding:10px 16px;border-radius:7px;font-size:12px;margin-bottom:.8rem;
+  background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.3);color:var(--grey);}
 </style>
 {% endblock %}
 {% block content %}
@@ -23,25 +20,28 @@
   <div class="page-header">
     <div>
       <h1>{{ 'Edit Investment' if investment else 'New Investment' }}</h1>
-      <p>Record a new investment or financial instrument</p>
+      <p>All fields auto-calculate — select asset class to begin</p>
     </div>
-    <a href="{{ url_for('admin.investments') }}" class="btn btn-secondary">← Back</a>
+    <a href="{{ url_for('admin.accounts') }}" class="btn btn-secondary">← Back</a>
   </div>
 
-  <form method="POST" id="inv-form">
-  <!-- ACCOUNT & ASSET CLASS -->
+  <form method="POST" id="inv-form" onsubmit="prepareSubmit()">
+
+  {# ── Account & Asset Class ── #}
   <div class="form-section">
-    <h3>Account & Asset Class</h3>
+    <h3>Account &amp; Asset Class</h3>
     <div class="form-grid">
       <div class="form-group">
         <label>Client Account *</label>
-        <select name="account_number" required id="account-select">
+        <select name="account_number" required id="acct-sel" onchange="updateCashBanner()">
           <option value="">— Select Account —</option>
-          {% for acc in accounts %}
-          <option value="{{ acc.account_number }}"
-            {{ 'selected' if investment and investment.account_number==acc.account_number
-               or request.args.get('acc')==acc.account_number }}>
-            {{ acc.account_number }} — {{ acc.full_name }}
+          {% for a in accounts %}
+          <option value="{{ a.account_number }}"
+                  data-cash="{{ a.cash_balance }}"
+                  data-currency="{{ a.base_currency }}"
+                  {{ 'selected' if (investment and investment.account_number==a.account_number)
+                     or request.args.get('acc')==a.account_number }}>
+            {{ a.account_number }} — {{ a.full_name }}
           </option>
           {% endfor %}
         </select>
@@ -50,172 +50,224 @@
         <label>Asset Class *</label>
         <select name="asset_class" id="asset-class" required onchange="switchPanel()">
           <option value="">— Select Asset Class —</option>
-          <option value="MONEY_MARKET" {{ 'selected' if investment and investment.asset_class=='MONEY_MARKET' }}>Money Market</option>
-          <option value="GOVT_SECURITIES" {{ 'selected' if investment and investment.asset_class=='GOVT_SECURITIES' }}>Government Securities</option>
-          <option value="BONDS" {{ 'selected' if investment and investment.asset_class=='BONDS' }}>Bonds (GOG / Corporate)</option>
-          <option value="EUROBONDS" {{ 'selected' if investment and investment.asset_class=='EUROBONDS' }}>Eurobonds</option>
-          <option value="GSE_EQUITIES" {{ 'selected' if investment and investment.asset_class=='GSE_EQUITIES' }}>GSE Listed Equities</option>
-          <option value="GLOBAL_EQUITIES" {{ 'selected' if investment and investment.asset_class=='GLOBAL_EQUITIES' }}>Global Equities</option>
-          <option value="PRIVATE_EQUITY" {{ 'selected' if investment and investment.asset_class=='PRIVATE_EQUITY' }}>Private Equity</option>
-          <option value="PRIVATE_DEBT" {{ 'selected' if investment and investment.asset_class=='PRIVATE_DEBT' }}>Private Debt / Direct Lending</option>
-          <option value="MUTUAL_FUNDS" {{ 'selected' if investment and investment.asset_class=='MUTUAL_FUNDS' }}>Mutual Funds / Unit Trusts</option>
+          <option value="MONEY_MARKET"    {{ 'selected' if investment and investment.asset_class=='MONEY_MARKET' }}>Money Market (Fixed Deposits, Call Accounts)</option>
+          <option value="GOVT_SECURITIES" {{ 'selected' if investment and investment.asset_class=='GOVT_SECURITIES' }}>Government Securities (T-Bills, Notes)</option>
+          <option value="BONDS"           {{ 'selected' if investment and investment.asset_class=='BONDS' }}>Bonds — GOG &amp; Corporate</option>
+          <option value="EUROBONDS"       {{ 'selected' if investment and investment.asset_class=='EUROBONDS' }}>Eurobonds (International Bonds)</option>
+          <option value="GSE_EQUITIES"    {{ 'selected' if investment and investment.asset_class=='GSE_EQUITIES' }}>GSE Listed Equities</option>
+          <option value="GLOBAL_EQUITIES" {{ 'selected' if investment and investment.asset_class=='GLOBAL_EQUITIES' }}>Global Equities (International Stocks)</option>
+          <option value="PRIVATE_EQUITY"  {{ 'selected' if investment and investment.asset_class=='PRIVATE_EQUITY' }}>Private Equity</option>
+          <option value="PRIVATE_DEBT"    {{ 'selected' if investment and investment.asset_class=='PRIVATE_DEBT' }}>Private Debt / Direct Lending</option>
+          <option value="MUTUAL_FUNDS"    {{ 'selected' if investment and investment.asset_class=='MUTUAL_FUNDS' }}>Mutual Funds &amp; Unit Trusts</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Currency</label>
-        <select name="currency">
-          <option value="GHS" {{ 'selected' if not investment or investment.currency=='GHS' }}>GHS — Ghanaian Cedi</option>
-          <option value="USD" {{ 'selected' if investment and investment.currency=='USD' }}>USD — US Dollar</option>
-          <option value="EUR" {{ 'selected' if investment and investment.currency=='EUR' }}>EUR — Euro</option>
-          <option value="GBP" {{ 'selected' if investment and investment.currency=='GBP' }}>GBP — British Pound</option>
-          <option value="CNY" {{ 'selected' if investment and investment.currency=='CNY' }}>CNY — Chinese Yuan</option>
-          <option value="NGN" {{ 'selected' if investment and investment.currency=='NGN' }}>NGN — Nigerian Naira</option>
+        <label>Transaction Currency</label>
+        <select name="currency" id="inv-currency">
+          {% for code, label in [('GHS','Ghanaian Cedi'),('USD','US Dollar'),('EUR','Euro'),('GBP','British Pound'),('CNY','Chinese Yuan'),('NGN','Nigerian Naira')] %}
+          <option value="{{ code }}" {{ 'selected' if investment and investment.currency==code or not investment and code=='GHS' }}>{{ code }} — {{ label }}</option>
+          {% endfor %}
         </select>
       </div>
     </div>
-    <div id="cash-info" style="margin-top:0.5rem;font-size:12px;color:var(--grey);"></div>
+    <div id="cash-banner" class="cash-banner" style="display:none;"></div>
   </div>
 
-  <!-- ══ MONEY MARKET PANEL ══ -->
+  {# ══════════════════════════════════════════════════════
+     PANEL: MONEY MARKET
+     Field prefix: mm_
+     ══════════════════════════════════════════════════════ #}
   <div class="asset-panel form-section" id="panel-MONEY_MARKET">
-    <h3>Money Market — Fixed Deposits & Call Accounts</h3>
+    <h3>💰 Money Market — Fixed Deposits &amp; Call Accounts</h3>
     <div class="form-grid">
-      <div class="form-group"><label>Sub-Type</label>
-        <select name="sub_type"><option value="Fixed Deposit">Fixed Deposit</option><option value="Call Account">Call Account</option><option value="Overnight">Overnight</option></select>
+      <div class="form-group">
+        <label>Sub-Type</label>
+        <select name="mm_sub_type">
+          <option value="Fixed Deposit">Fixed Deposit</option>
+          <option value="Call Account">Call Account</option>
+          <option value="Overnight">Overnight</option>
+        </select>
       </div>
-      <div class="form-group"><label>Issuer / Bank</label><input type="text" name="issuer" placeholder="e.g. GCB Bank, CBG" value="{{ investment.issuer if investment else '' }}"></div>
-      <div class="form-group"><label>Security Name</label><input type="text" name="security_name" value="{{ investment.security_name if investment else '' }}"></div>
-      <div class="form-group"><label>Trade / Investment Date</label><input type="date" name="trade_date" id="mm-trade-date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}" onchange="calcMM()"></div>
-      <div class="form-group"><label>Tenor (Days)</label><input type="number" name="tenor" id="mm-tenor" placeholder="e.g. 91, 182, 365" value="{{ investment.tenor if investment else '' }}" onchange="calcMM()"></div>
-      <div class="form-group"><label>Interest Rate (%)</label><input type="number" step="0.0001" name="interest_rate" id="mm-rate" placeholder="e.g. 25.50" value="{{ investment.interest_rate if investment else '' }}" onchange="calcMM()"></div>
-      <div class="form-group"><label>Principal / Face Value</label><input type="number" step="0.01" name="face_value" id="mm-face" placeholder="0.00" value="{{ investment.face_value if investment else '' }}" onchange="calcMM()"></div>
-      <div class="form-group"><label>Total Cost (Invested Amount)</label><input type="number" step="0.01" name="total_cost" id="mm-cost" placeholder="Auto-calculated" value="{{ investment.total_cost if investment else '' }}"></div>
-      <div class="form-group"><label>Maturity Date</label><input type="date" name="maturity_date" id="mm-maturity" value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}" readonly style="background:rgba(255,255,255,0.02);"></div>
+      <div class="form-group"><label>Issuer / Bank *</label><input type="text" name="mm_issuer" id="mm_issuer" placeholder="e.g. GCB Bank, CBG, Stanchart" value="{{ investment.issuer if investment else '' }}"></div>
+      <div class="form-group"><label>Security / Deposit Name</label><input type="text" name="mm_security_name" id="mm_security_name" value="{{ investment.security_name if investment else '' }}"></div>
+      <div class="form-group"><label>Trade / Placement Date *</label><input type="date" name="mm_trade_date" id="mm_trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}" onchange="calcMM()"></div>
+      <div class="form-group"><label>Tenor (Days) *</label><input type="number" name="mm_tenor" id="mm_tenor" placeholder="e.g. 91, 182, 365" value="{{ investment.tenor if investment else '' }}" onchange="calcMM()"></div>
+      <div class="form-group"><label>Interest Rate (% p.a.) *</label><input type="number" step="0.0001" name="mm_interest_rate" id="mm_interest_rate" placeholder="e.g. 25.5000" value="{{ investment.interest_rate if investment else '' }}" onchange="calcMM()"></div>
+      <div class="form-group"><label>Face / Principal Value *</label><input type="number" step="0.01" name="mm_face_value" id="mm_face_value" placeholder="0.00" value="{{ investment.face_value if investment else '' }}" onchange="calcMM()"></div>
+ <div class="form-group"><label>Cost / Principal (Auto)</label><input type="number" step="0.01" name="mm_total_cost" id="mm_total_cost" class="auto-field" value="{{ investment.total_cost if investment else '' }}" placeholder="Auto-calculated"></div>
+ <div class="form-group"><label>Maturity Date (Auto)</label><input type="date" name="mm_maturity_date" id="mm_maturity_date" class="auto-field" value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}"></div>
     </div>
-    <div id="mm-result" class="calc-result" style="display:none;"></div>
+    <div id="mm_calc" class="calc-box" style="display:none;"></div>
   </div>
 
-  <!-- ══ GOVERNMENT SECURITIES PANEL ══ -->
+  {# ══════════════════════════════════════════════════════
+     PANEL: GOVERNMENT SECURITIES
+     Field prefix: gs_
+     ══════════════════════════════════════════════════════ #}
   <div class="asset-panel form-section" id="panel-GOVT_SECURITIES">
-    <h3>Government Securities — Treasury Bills & Notes</h3>
+    <h3>🏛 Government Securities — Treasury Bills &amp; Notes</h3>
     <div class="form-grid">
-      <div class="form-group"><label>Security Type</label>
-        <select name="sub_type" id="gs-subtype" onchange="calcGS()">
+      <div class="form-group">
+        <label>Security Type *</label>
+        <select name="gs_sub_type" id="gs_sub_type" onchange="calcGS()">
           <option value="91-Day T-Bill">91-Day T-Bill (364-day basis)</option>
           <option value="182-Day T-Bill">182-Day T-Bill (364-day basis)</option>
           <option value="364-Day T-Bill">364-Day T-Bill (364-day basis)</option>
-          <option value="1-Year Note">1-Year Note</option>
-          <option value="2-Year Note">2-Year Note</option>
+          <option value="1-Year Note">1-Year Note (365-day basis)</option>
+          <option value="2-Year Note">2-Year Note (365-day basis)</option>
+          <option value="3-Year Note">3-Year Note (365-day basis)</option>
         </select>
       </div>
-      <div class="form-group"><label>Issuer</label><input type="text" name="issuer" value="GOG" readonly style="background:rgba(255,255,255,0.02);"></div>
-      <div class="form-group"><label>Security Name / ISIN</label><input type="text" name="security_name" id="gs-name" value="{{ investment.security_name if investment else '' }}"></div>
-      <div class="form-group"><label>Trade Date</label><input type="date" name="trade_date" id="gs-trade" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}" onchange="calcGS()"></div>
-      <div class="form-group"><label>Tenor (Days)</label><input type="number" name="tenor" id="gs-tenor" value="{{ investment.tenor if investment else '' }}" onchange="calcGS()"></div>
-      <div class="form-group"><label>Rate (%)</label><input type="number" step="0.0001" name="interest_rate" id="gs-rate" value="{{ investment.interest_rate if investment else '' }}" onchange="calcGS()"></div>
-      <div class="form-group"><label>Face Value (GHS)</label><input type="number" step="0.01" name="face_value" id="gs-face" value="{{ investment.face_value if investment else '' }}" onchange="calcGS()"></div>
-      <div class="form-group"><label>Principal / Cost (Auto)</label><input type="number" step="0.01" name="total_cost" id="gs-cost" value="{{ investment.total_cost if investment else '' }}"></div>
-      <div class="form-group"><label>Maturity Date (Auto)</label><input type="date" name="maturity_date" id="gs-maturity" value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}" readonly style="background:rgba(255,255,255,0.02);"></div>
+      <div class="form-group"><label>Issuer</label><input type="text" name="gs_issuer" id="gs_issuer" value="GOG" readonly style="background:rgba(255,255,255,.02);"></div>
+      <div class="form-group"><label>Security Name / ISIN</label><input type="text" name="gs_security_name" id="gs_security_name" value="{{ investment.security_name if investment else '' }}"></div>
+      <div class="form-group"><label>Trade Date *</label><input type="date" name="gs_trade_date" id="gs_trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}" onchange="calcGS()"></div>
+      <div class="form-group"><label>Tenor (Days — auto from type)</label><input type="number" name="gs_tenor" id="gs_tenor" value="{{ investment.tenor if investment else '' }}" onchange="calcGS()" placeholder="Auto-filled"></div>
+      <div class="form-group"><label>Discount Rate (% p.a.) *</label><input type="number" step="0.0001" name="gs_interest_rate" id="gs_interest_rate" placeholder="e.g. 28.5000" value="{{ investment.interest_rate if investment else '' }}" onchange="calcGS()"></div>
+      <div class="form-group"><label>Face Value (GHS) *</label><input type="number" step="0.01" name="gs_face_value" id="gs_face_value" placeholder="0.00" value="{{ investment.face_value if investment else '' }}" onchange="calcGS()"></div>
+ <div class="form-group"><label>Cost / Purchase Price (Auto)</label><input type="number" step="0.01" name="gs_total_cost" id="gs_total_cost" class="auto-field" value="{{ investment.total_cost if investment else '' }}" placeholder="Auto-calculated"></div>
+ <div class="form-group"><label>Maturity Date (Auto)</label><input type="date" name="gs_maturity_date" id="gs_maturity_date" class="auto-field" value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}"></div>
     </div>
-    <div id="gs-result" class="calc-result" style="display:none;"></div>
+    <div id="gs_calc" class="calc-box" style="display:none;"></div>
   </div>
 
-  <!-- ══ BONDS PANEL ══ -->
+  {# ══════════════════════════════════════════════════════
+     PANEL: BONDS
+     Field prefix: bond_
+     ══════════════════════════════════════════════════════ #}
   <div class="asset-panel form-section" id="panel-BONDS">
-    <h3>Bonds — Government & Corporate</h3>
+    <h3>📋 Bonds — Government &amp; Corporate</h3>
     <div class="form-grid">
-      <div class="form-group"><label>Bond Type</label>
-        <select name="sub_type" id="bond-subtype" onchange="calcBond()">
-          <option value="GOG Bond">GOG Bond</option>
+      <div class="form-group">
+        <label>Bond Type *</label>
+        <select name="bond_sub_type" id="bond_sub_type">
+          <option value="GOG Bond">GOG Bond (Government)</option>
           <option value="Corporate Bond">Corporate Bond</option>
           <option value="Municipal Bond">Municipal Bond</option>
         </select>
       </div>
-      <div class="form-group"><label>Issuer</label><input type="text" name="issuer" id="bond-issuer" value="{{ investment.issuer if investment else '' }}" onchange="calcBond()"></div>
-      <div class="form-group"><label>Security Name / ISIN</label><input type="text" name="security_name" value="{{ investment.security_name if investment else '' }}"></div>
-      <div class="form-group"><label>Issue Date</label><input type="date" name="issue_date" value="{{ investment.issue_date.isoformat() if investment and investment.issue_date else '' }}"></div>
-      <div class="form-group"><label>Trade Date</label><input type="date" name="trade_date" id="bond-trade" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}" onchange="calcBond()"></div>
-      <div class="form-group"><label>Tenor (Years)</label><input type="number" name="tenor" id="bond-tenor" placeholder="e.g. 3, 5, 10" value="{{ investment.tenor if investment else '' }}" onchange="calcBond()"></div>
-      <div class="form-group"><label>Coupon Rate (%)</label><input type="number" step="0.0001" name="coupon_rate" id="bond-cpn" value="{{ investment.coupon_rate if investment else '' }}" onchange="calcBond()"></div>
-      <div class="form-group"><label>Coupon Frequency (per year)</label>
-        <select name="coupon_freq" id="bond-freq" onchange="calcBond()">
-          <option value="1">Annual (1)</option>
-          <option value="2" selected>Semi-Annual (2)</option>
-          <option value="4">Quarterly (4)</option>
+      <div class="form-group"><label>Issuer / Company *</label><input type="text" name="bond_issuer" id="bond_issuer" placeholder="e.g. Republic of Ghana, GCB Bank" value="{{ investment.issuer if investment else '' }}"></div>
+      <div class="form-group"><label>Security Name / ISIN</label><input type="text" name="bond_security_name" id="bond_security_name" value="{{ investment.security_name if investment else '' }}"></div>
+      <div class="form-group"><label>Issue Date</label><input type="date" name="bond_issue_date" id="bond_issue_date" value="{{ investment.issue_date.isoformat() if investment and investment.issue_date else '' }}"></div>
+      <div class="form-group"><label>Trade / Settlement Date *</label><input type="date" name="bond_trade_date" id="bond_trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}" onchange="calcBond()"></div>
+      <div class="form-group">
+        <label>Tenor (Years) *</label>
+        <input type="number" step="0.5" name="bond_tenor" id="bond_tenor" placeholder="e.g. 3, 5, 7, 10" value="{{ investment.tenor if investment else '' }}" onchange="calcBond()">
+        <span style="font-size:10px;color:var(--grey);">Enter in years (e.g. 5 = 5-year bond) — maturity auto-calculated</span>
+      </div>
+      <div class="form-group"><label>Coupon Rate (% p.a.) *</label><input type="number" step="0.0001" name="bond_coupon_rate" id="bond_coupon_rate" placeholder="e.g. 19.0000" value="{{ investment.coupon_rate if investment else '' }}" onchange="calcBond()"></div>
+      <div class="form-group">
+        <label>Coupon Frequency</label>
+        <select name="bond_coupon_freq" id="bond_coupon_freq" onchange="calcBond()">
+          <option value="1">Annual</option>
+          <option value="2" selected>Semi-Annual</option>
+          <option value="4">Quarterly</option>
         </select>
       </div>
-      <div class="form-group"><label>Last Coupon Date</label><input type="date" name="last_coupon_date" id="bond-lastcpn" value="{{ investment.last_coupon_date.isoformat() if investment and investment.last_coupon_date else '' }}" onchange="calcBond()"></div>
-      <div class="form-group"><label>Face Value</label><input type="number" step="0.01" name="face_value" id="bond-face" value="{{ investment.face_value if investment else '' }}" onchange="calcBond()"></div>
-      <div class="form-group"><label>Clean Price (%) ← MTM price</label><input type="number" step="0.0001" name="clean_price" id="bond-cleanpx" placeholder="e.g. 98.20" value="{{ investment.clean_price if investment else '' }}" onchange="calcBond()"></div>
-      <div class="form-group"><label>Market Value (Auto)</label><input type="number" step="0.01" name="total_cost" id="bond-mktval" value="{{ investment.total_cost if investment else '' }}" readonly style="background:rgba(255,255,255,0.02);"></div>
-      <div class="form-group"><label>Maturity Date (Auto)</label><input type="date" name="maturity_date" id="bond-maturity" value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}" readonly style="background:rgba(255,255,255,0.02);"></div>
+      <div class="form-group"><label>Last Coupon Date</label><input type="date" name="bond_last_coupon_date" id="bond_last_coupon_date" value="{{ investment.last_coupon_date.isoformat() if investment and investment.last_coupon_date else '' }}" onchange="calcBond()"></div>
+      <div class="form-group"><label>Face Value *</label><input type="number" step="0.01" name="bond_face_value" id="bond_face_value" placeholder="0.00" value="{{ investment.face_value if investment else '' }}" onchange="calcBond()"></div>
+      <div class="form-group"><label>Clean Price (% of par) — MTM price</label><input type="number" step="0.0001" name="bond_clean_price" id="bond_clean_price" placeholder="e.g. 98.50 (=98.50%)" value="{{ investment.clean_price if investment else '' }}" onchange="calcBond()"></div>
+ <div class="form-group"><label>Market / Dirty Value (Auto)</label><input type="number" step="0.01" name="bond_total_cost" id="bond_total_cost" class="auto-field" value="{{ investment.total_cost if investment else '' }}" placeholder="Auto-calculated"></div>
+      <div class="form-group">
+        <label>Maturity Date (Auto from Tenor)</label>
+        <input type="date" name="bond_maturity_date" id="bond_maturity_date"
+               style="background:rgba(39,174,96,.07);border-color:rgba(39,174,96,.35);"
+               value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}">
+        <span style="font-size:10px;color:var(--green);">✓ Auto-calculated from Trade Date + Tenor. You may override if needed.</span>
+      </div>
+      <div class="form-group"><label>Credit Rating</label><input type="text" name="bond_rating" id="bond_rating" placeholder="e.g. B+, BB" value="{{ investment.rating if investment else '' }}"></div>
     </div>
-    <div id="bond-result" class="calc-result" style="display:none;"></div>
+    <div id="bond_calc" class="calc-box" style="display:none;"></div>
   </div>
 
-  <!-- ══ EUROBONDS PANEL ══ -->
+  {# ══════════════════════════════════════════════════════
+     PANEL: EUROBONDS
+     Field prefix: euro_
+     ══════════════════════════════════════════════════════ #}
   <div class="asset-panel form-section" id="panel-EUROBONDS">
-    <h3>Eurobonds (International Bonds)</h3>
+    <h3>🌍 Eurobonds — International Bonds</h3>
     <div class="form-grid">
-      <div class="form-group"><label>Bond Type</label>
-        <select name="sub_type">
+      <div class="form-group">
+        <label>Bond Type</label>
+        <select name="euro_sub_type">
           <option value="Eurobond">Eurobond</option>
           <option value="USD Sovereign Bond">USD Sovereign Bond</option>
           <option value="EUR Sovereign Bond">EUR Sovereign Bond</option>
           <option value="GBP Bond">GBP Bond</option>
         </select>
       </div>
-      <div class="form-group"><label>Issuer / Sovereign</label><input type="text" name="issuer" value="{{ investment.issuer if investment else '' }}"></div>
-      <div class="form-group"><label>Security Name / ISIN</label><input type="text" name="security_name" value="{{ investment.security_name if investment else '' }}"></div>
-      <div class="form-group"><label>Country of Issue</label><input type="text" name="country_of_issue" value="{{ investment.country_of_issue if investment else '' }}" placeholder="e.g. Ghana, Nigeria, Kenya"></div>
-      <div class="form-group"><label>Issue Date</label><input type="date" name="issue_date" value="{{ investment.issue_date.isoformat() if investment and investment.issue_date else '' }}"></div>
-      <div class="form-group"><label>Trade Date</label><input type="date" name="trade_date" id="euro-trade" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}" onchange="calcEuro()"></div>
-      <div class="form-group"><label>Maturity Date</label><input type="date" name="maturity_date" id="euro-maturity" value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}"></div>
-      <div class="form-group"><label>Coupon Rate (%)</label><input type="number" step="0.0001" name="coupon_rate" id="euro-cpn" value="{{ investment.coupon_rate if investment else '' }}" onchange="calcEuro()"></div>
-      <div class="form-group"><label>Coupon Frequency</label>
-        <select name="coupon_freq"><option value="2" selected>Semi-Annual</option><option value="1">Annual</option><option value="4">Quarterly</option></select>
+      <div class="form-group"><label>Issuer / Sovereign *</label><input type="text" name="euro_issuer" id="euro_issuer" placeholder="e.g. Republic of Ghana, Ivory Coast" value="{{ investment.issuer if investment else '' }}"></div>
+      <div class="form-group"><label>Security Name / ISIN</label><input type="text" name="euro_security_name" id="euro_security_name" value="{{ investment.security_name if investment else '' }}"></div>
+      <div class="form-group"><label>Country of Issue</label><input type="text" name="euro_country_of_issue" id="euro_country_of_issue" placeholder="e.g. Ghana" value="{{ investment.country_of_issue if investment else '' }}"></div>
+      <div class="form-group"><label>Issue Date</label><input type="date" name="euro_issue_date" id="euro_issue_date" value="{{ investment.issue_date.isoformat() if investment and investment.issue_date else '' }}"></div>
+      <div class="form-group"><label>Trade / Settlement Date *</label><input type="date" name="euro_trade_date" id="euro_trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}" onchange="calcEuro()"></div>
+      <div class="form-group">
+        <label>Tenor (Years) *</label>
+        <input type="number" step="0.5" name="euro_tenor" id="euro_tenor" placeholder="e.g. 10, 15, 30" value="{{ investment.tenor if investment else '' }}" onchange="calcEuro()">
+        <span style="font-size:10px;color:var(--grey);">In years — maturity auto-calculated</span>
       </div>
-      <div class="form-group"><label>Last Coupon Date</label><input type="date" name="last_coupon_date" id="euro-lastcpn" onchange="calcEuro()"></div>
-      <div class="form-group"><label>Face Value (USD / Foreign CCY)</label><input type="number" step="0.01" name="face_value" id="euro-face" value="{{ investment.face_value if investment else '' }}" onchange="calcEuro()"></div>
-      <div class="form-group"><label>Clean Price (%) ← MTM</label><input type="number" step="0.0001" name="clean_price" id="euro-cleanpx" value="{{ investment.clean_price if investment else '' }}" onchange="calcEuro()"></div>
-      <div class="form-group"><label>Market Value (Auto)</label><input type="number" step="0.01" name="total_cost" id="euro-mktval" readonly style="background:rgba(255,255,255,0.02);"></div>
-      <div class="form-group"><label>Credit Rating</label><input type="text" name="rating" value="{{ investment.rating if investment else '' }}" placeholder="e.g. B+, BB-, Caa1"></div>
-      <div class="form-group"><label>Exchange</label><input type="text" name="exchange" value="{{ investment.exchange if investment else '' }}" placeholder="e.g. EURONEXT, LSE"></div>
+      <div class="form-group"><label>Coupon Rate (% p.a.) *</label><input type="number" step="0.0001" name="euro_coupon_rate" id="euro_coupon_rate" placeholder="e.g. 8.625" value="{{ investment.coupon_rate if investment else '' }}" onchange="calcEuro()"></div>
+      <div class="form-group">
+        <label>Coupon Frequency</label>
+        <select name="euro_coupon_freq">
+          <option value="2" selected>Semi-Annual</option><option value="1">Annual</option><option value="4">Quarterly</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Last Coupon Date</label><input type="date" name="euro_last_coupon_date" id="euro_last_coupon_date" onchange="calcEuro()"></div>
+      <div class="form-group"><label>Face Value (Foreign CCY) *</label><input type="number" step="0.01" name="euro_face_value" id="euro_face_value" placeholder="0.00" value="{{ investment.face_value if investment else '' }}" onchange="calcEuro()"></div>
+      <div class="form-group"><label>Clean Price (% of par) — MTM</label><input type="number" step="0.0001" name="euro_clean_price" id="euro_clean_price" placeholder="e.g. 96.75" value="{{ investment.clean_price if investment else '' }}" onchange="calcEuro()"></div>
+ <div class="form-group"><label>Market / Dirty Value (Auto)</label><input type="number" step="0.01" name="euro_total_cost" id="euro_total_cost" class="auto-field" value="{{ investment.total_cost if investment else '' }}" placeholder="Auto-calculated"></div>
+      <div class="form-group">
+        <label>Maturity Date (Auto from Tenor)</label>
+        <input type="date" name="euro_maturity_date" id="euro_maturity_date"
+               style="background:rgba(39,174,96,.07);border-color:rgba(39,174,96,.35);"
+               value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}">
+        <span style="font-size:10px;color:var(--green);">✓ Auto-calculated from Trade Date + Tenor.</span>
+      </div>
+      <div class="form-group"><label>Exchange</label><input type="text" name="euro_exchange" id="euro_exchange" placeholder="EURONEXT, LSE, NYSE" value="{{ investment.exchange if investment else '' }}"></div>
+      <div class="form-group"><label>Credit Rating</label><input type="text" name="euro_rating" id="euro_rating" placeholder="e.g. B3, Caa1" value="{{ investment.rating if investment else '' }}"></div>
     </div>
-    <div id="euro-result" class="calc-result" style="display:none;"></div>
+    <div id="euro_calc" class="calc-box" style="display:none;"></div>
   </div>
 
-  <!-- ══ GSE EQUITIES PANEL ══ -->
+  {# ══════════════════════════════════════════════════════
+     PANEL: GSE EQUITIES
+     Field prefix: gse_
+     ══════════════════════════════════════════════════════ #}
   <div class="asset-panel form-section" id="panel-GSE_EQUITIES">
-    <h3>GSE Listed Equities</h3>
+    <h3>📈 GSE Listed Equities</h3>
     <div class="form-grid">
-      <div class="form-group"><label>GSE Symbol</label>
-        <select name="symbol" id="gse-symbol" onchange="fillGSE()">
+      <div class="form-group">
+        <label>GSE Symbol *</label>
+        <select name="gse_symbol" id="gse_symbol" onchange="fillGSE()">
           <option value="">— Select Stock —</option>
-          {% for sym in ['ACCESS','ADB','ASG','ALLGH','BOPP','CAL','EGH','EGL','ETI','FML',
-                          'GCB','GGBL','GOIL','MAC','MTNGH','RBGH','SCB','SIC','SOGEGH','TOTAL','TLW','UNIL'] %}
+          {% for sym in ['ACCESS','ADB','ASG','ALLGH','BOPP','CAL','EGH','EGL','ETI','FML','GCB','GGBL','GOIL','MAC','MTNGH','RBGH','SCB','SIC','SOGEGH','TOTAL','TLW','UNIL'] %}
           <option value="{{ sym }}" {{ 'selected' if investment and investment.symbol==sym }}>{{ sym }}</option>
           {% endfor %}
           <option value="OTHER">Other / Unlisted</option>
         </select>
       </div>
-      <div class="form-group"><label>Security Name</label><input type="text" name="security_name" id="gse-name" value="{{ investment.security_name if investment else '' }}"></div>
-      <div class="form-group"><label>Sector</label><input type="text" name="sector" id="gse-sector" value="{{ investment.sector if investment else '' }}"></div>
-      <div class="form-group"><label>Trade Date</label><input type="date" name="trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}"></div>
-      <div class="form-group"><label>Quantity (Shares)</label><input type="number" step="1" name="quantity" id="gse-qty" value="{{ investment.quantity if investment else '' }}" onchange="calcEquity('gse')"></div>
-      <div class="form-group"><label>Unit Cost (GHS)</label><input type="number" step="0.0001" name="unit_cost" id="gse-ucost" value="{{ investment.unit_cost if investment else '' }}" onchange="calcEquity('gse')"></div>
-      <div class="form-group"><label>Current Market Price</label><input type="number" step="0.0001" name="current_price" id="gse-price" value="{{ investment.current_price if investment else '' }}" onchange="calcEquity('gse')"></div>
-      <div class="form-group"><label>Total Cost (Auto)</label><input type="number" step="0.01" name="total_cost" id="gse-cost" value="{{ investment.total_cost if investment else '' }}" readonly style="background:rgba(255,255,255,0.02);"></div>
-      <div class="form-group"><label>Exchange</label><input type="text" name="exchange" value="{{ investment.exchange or 'GSE' if investment else 'GSE' }}"></div>
+      <div class="form-group"><label>Security Name</label><input type="text" name="gse_security_name" id="gse_security_name" value="{{ investment.security_name if investment else '' }}"></div>
+      <div class="form-group"><label>Sector</label><input type="text" name="gse_sector" id="gse_sector" value="{{ investment.sector if investment else '' }}"></div>
+      <div class="form-group"><label>Trade Date *</label><input type="date" name="gse_trade_date" id="gse_trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}"></div>
+      <div class="form-group"><label>Quantity (Shares) *</label><input type="number" step="1" min="1" name="gse_quantity" id="gse_quantity" placeholder="Number of shares" value="{{ investment.quantity|int if investment and investment.quantity else '' }}" oninput="calcGSE()"></div>
+      <div class="form-group"><label>Unit Cost / Purchase Price (GHS) *</label><input type="number" step="0.0001" name="gse_unit_cost" id="gse_unit_cost" placeholder="Price per share at purchase" value="{{ investment.unit_cost if investment else '' }}" oninput="calcGSE()"></div>
+      <div class="form-group"><label>Current Market Price (GHS)</label><input type="number" step="0.0001" name="gse_current_price" id="gse_current_price" placeholder="Latest GSE closing price" value="{{ investment.current_price if investment else '' }}" oninput="calcGSE()"></div>
+ <div class="form-group"><label>Total Purchase Cost (Auto)</label><input type="number" step="0.01" name="gse_total_cost" id="gse_total_cost" class="auto-field" placeholder="Auto = Qty × Unit Cost" value="{{ investment.total_cost if investment else '' }}"></div>
+      <div class="form-group"><label>Exchange</label><input type="text" name="gse_exchange" value="GSE" readonly style="background:rgba(255,255,255,.02);"></div>
     </div>
+    <div id="gse_calc" class="calc-box" style="display:none;"></div>
   </div>
 
-  <!-- ══ GLOBAL EQUITIES PANEL ══ -->
+  {# ══════════════════════════════════════════════════════
+     PANEL: GLOBAL EQUITIES
+     Field prefix: gl_
+     ══════════════════════════════════════════════════════ #}
   <div class="asset-panel form-section" id="panel-GLOBAL_EQUITIES">
-    <h3>Global Equities (International Stocks)</h3>
+    <h3>🌐 Global Equities — International Stocks</h3>
     <div class="form-grid">
-      <div class="form-group"><label>Stock Symbol</label>
-        <select name="symbol" id="gl-symbol" onchange="fillGlobal()">
+      <div class="form-group">
+        <label>Stock Symbol *</label>
+        <select name="gl_symbol" id="gl_symbol" onchange="fillGlobal()">
           <option value="">— Select Stock —</option>
           {% for sym in ['TSLA','AAPL','MSFT','GOOGL','META','AMZN','NVDA','TM','JPM','XOM','BRK.B','V'] %}
           <option value="{{ sym }}" {{ 'selected' if investment and investment.symbol==sym }}>{{ sym }}</option>
@@ -223,333 +275,647 @@
           <option value="OTHER">Other Symbol</option>
         </select>
       </div>
-      <div class="form-group"><label>Security Name</label><input type="text" name="security_name" id="gl-name" value="{{ investment.security_name if investment else '' }}"></div>
-      <div class="form-group"><label>Exchange</label><input type="text" name="exchange" id="gl-exchange" value="{{ investment.exchange if investment else '' }}" placeholder="NASDAQ, NYSE, LSE"></div>
-      <div class="form-group"><label>Sector</label><input type="text" name="sector" id="gl-sector" value="{{ investment.sector if investment else '' }}"></div>
-      <div class="form-group"><label>Trade Date</label><input type="date" name="trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}"></div>
-      <div class="form-group"><label>Quantity</label><input type="number" step="0.0001" name="quantity" id="gl-qty" value="{{ investment.quantity if investment else '' }}" onchange="calcEquity('gl')"></div>
-      <div class="form-group"><label>Unit Cost (USD)</label><input type="number" step="0.0001" name="unit_cost" id="gl-ucost" value="{{ investment.unit_cost if investment else '' }}" onchange="calcEquity('gl')"></div>
-      <div class="form-group"><label>Current Market Price (USD)</label><input type="number" step="0.0001" name="current_price" id="gl-price" value="{{ investment.current_price if investment else '' }}" onchange="calcEquity('gl')"></div>
-      <div class="form-group"><label>Total Cost (Auto)</label><input type="number" step="0.01" name="total_cost" id="gl-cost" value="{{ investment.total_cost if investment else '' }}" readonly style="background:rgba(255,255,255,0.02);"></div>
-      <div class="form-group"><label>ISIN</label><input type="text" name="isin" value="{{ investment.isin if investment else '' }}"></div>
+      <div class="form-group"><label>Security Name</label><input type="text" name="gl_security_name" id="gl_security_name" value="{{ investment.security_name if investment else '' }}"></div>
+      <div class="form-group"><label>Exchange</label><input type="text" name="gl_exchange" id="gl_exchange" placeholder="NASDAQ, NYSE, LSE" value="{{ investment.exchange if investment else '' }}"></div>
+      <div class="form-group"><label>Sector</label><input type="text" name="gl_sector" id="gl_sector" value="{{ investment.sector if investment else '' }}"></div>
+      <div class="form-group"><label>Trade Date *</label><input type="date" name="gl_trade_date" id="gl_trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}"></div>
+      <div class="form-group"><label>Quantity (Shares) *</label><input type="number" step="0.0001" min="0.0001" name="gl_quantity" id="gl_quantity" placeholder="Number of shares" value="{{ investment.quantity if investment else '' }}" oninput="calcGL()"></div>
+      <div class="form-group"><label>Unit Cost (USD) *</label><input type="number" step="0.0001" name="gl_unit_cost" id="gl_unit_cost" placeholder="Price per share at purchase" value="{{ investment.unit_cost if investment else '' }}" oninput="calcGL()"></div>
+      <div class="form-group"><label>Current Market Price (USD)</label><input type="number" step="0.0001" name="gl_current_price" id="gl_current_price" placeholder="Latest market price" value="{{ investment.current_price if investment else '' }}" oninput="calcGL()"></div>
+ <div class="form-group"><label>Total Cost (USD, Auto)</label><input type="number" step="0.01" name="gl_total_cost" id="gl_total_cost" class="auto-field" placeholder="Auto = Qty × Unit Cost" value="{{ investment.total_cost if investment else '' }}"></div>
+      <div class="form-group"><label>ISIN</label><input type="text" name="gl_isin" value="{{ investment.isin if investment else '' }}"></div>
     </div>
+    <div id="gl_calc" class="calc-box" style="display:none;"></div>
   </div>
 
-  <!-- ══ PRIVATE EQUITY PANEL ══ -->
+  {# ══════════════════════════════════════════════════════
+     PANEL: PRIVATE EQUITY
+     Field prefix: pe_
+     ══════════════════════════════════════════════════════ #}
   <div class="asset-panel form-section" id="panel-PRIVATE_EQUITY">
-    <h3>Private Equity</h3>
+    <h3>🏢 Private Equity</h3>
     <div class="form-grid">
-      <div class="form-group"><label>Fund / Company Name</label><input type="text" name="security_name" value="{{ investment.security_name if investment else '' }}"></div>
-      <div class="form-group"><label>Sector</label><input type="text" name="sector" value="{{ investment.sector if investment else '' }}"></div>
-      <div class="form-group"><label>Vintage Year</label><input type="number" name="vintage_year" value="{{ investment.vintage_year if investment else '' }}" placeholder="e.g. 2023"></div>
-      <div class="form-group"><label>Geography</label><input type="text" name="geography" value="{{ investment.geography if investment else '' }}" placeholder="e.g. Pan African, West Africa"></div>
-      <div class="form-group"><label>Stage</label>
-        <select name="stage">
-          <option value="Venture Capital">Venture Capital</option>
-          <option value="Growth Equity">Growth Equity</option>
-          <option value="Buyout">Buyout</option>
-          <option value="Mezzanine">Mezzanine</option>
-          <option value="Seed">Seed</option>
+      <div class="form-group"><label>Fund / Company Name *</label><input type="text" name="pe_security_name" id="pe_security_name" placeholder="Name of PE fund or portfolio company" value="{{ investment.security_name if investment else '' }}"></div>
+      <div class="form-group"><label>Sector</label><input type="text" name="pe_sector" id="pe_sector" placeholder="e.g. Fintech, Energy, Agriculture" value="{{ investment.sector if investment else '' }}"></div>
+      <div class="form-group"><label>Vintage Year</label><input type="number" name="pe_vintage_year" id="pe_vintage_year" placeholder="{{ 'now'|int }}" value="{{ investment.vintage_year if investment else '' }}"></div>
+      <div class="form-group"><label>Geography</label><input type="text" name="pe_geography" id="pe_geography" placeholder="e.g. Pan-African, West Africa" value="{{ investment.geography if investment else '' }}"></div>
+      <div class="form-group">
+        <label>Stage</label>
+        <select name="pe_stage" id="pe_stage">
+          {% for s in ['Venture Capital','Growth Equity','Buyout','Mezzanine','Seed','Pre-IPO'] %}
+          <option value="{{ s }}" {{ 'selected' if investment and investment.stage==s }}>{{ s }}</option>
+          {% endfor %}
         </select>
       </div>
-      <div class="form-group"><label>Trade Date</label><input type="date" name="trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}"></div>
-      <div class="form-group"><label>Committed Amount</label><input type="number" step="0.01" name="committed" value="{{ investment.committed if investment else '' }}"></div>
-      <div class="form-group"><label>Called Amount</label><input type="number" step="0.01" name="called" value="{{ investment.called if investment else '' }}"></div>
-      <div class="form-group"><label>Total Cost (= Called)</label><input type="number" step="0.01" name="total_cost" value="{{ investment.total_cost if investment else '' }}"></div>
-      <div class="form-group"><label>Distributions</label><input type="number" step="0.01" name="distributions" value="{{ investment.distributions if investment else '' }}"></div>
-      <div class="form-group"><label>MOIC (x)</label><input type="number" step="0.0001" name="moic" value="{{ investment.moic if investment else '' }}" placeholder="e.g. 2.5"></div>
-      <div class="form-group"><label>IRR (%)</label><input type="number" step="0.0001" name="irr" value="{{ investment.irr if investment else '' }}"></div>
-      <div class="form-group"><label>NAV / Fair Value</label><input type="number" step="0.01" name="nav" value="{{ investment.nav if investment else '' }}"></div>
+      <div class="form-group"><label>Investment / Commitment Date *</label><input type="date" name="pe_trade_date" id="pe_trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}"></div>
+      <div class="form-group">
+        <label>Committed Amount *</label>
+        <input type="number" step="0.01" name="pe_committed" id="pe_committed" placeholder="Total commitment" value="{{ investment.committed if investment else '' }}" oninput="calcPE()">
+        <span style="font-size:10px;color:var(--grey);">Total amount committed to the fund</span>
+      </div>
+      <div class="form-group">
+        <label>Called / Drawn Amount *</label>
+        <input type="number" step="0.01" name="pe_called" id="pe_called" placeholder="Amount drawn to date" value="{{ investment.called if investment else '' }}" oninput="calcPE()">
+        <span style="font-size:10px;color:var(--grey);">Cash actually deployed — this reduces your account cash</span>
+      </div>
+ <div class="form-group"><label>Uncalled / Remaining Commitment (Auto)</label><input type="number" step="0.01" name="pe_uncalled" id="pe_uncalled" class="auto-field" placeholder="Committed − Called"></div>
+      <div class="form-group">
+        <label>Total Cost (= Called Amount)</label>
+ <input type="number" step="0.01" name="pe_total_cost" id="pe_total_cost" class="auto-field" placeholder="Auto = Called amount" value="{{ investment.total_cost if investment else '' }}">
+        <span style="font-size:10px;color:var(--grey);">This amount is deducted from cash</span>
+      </div>
+      <div class="form-group">
+        <label>Distributions Received</label>
+        <input type="number" step="0.01" name="pe_distributions" id="pe_distributions" placeholder="0.00" value="{{ investment.distributions if investment else '' }}" oninput="calcPE()">
+      </div>
+      <div class="form-group">
+        <label>NAV / Fair Value *</label>
+        <input type="number" step="0.01" name="pe_nav" id="pe_nav" placeholder="Current net asset value" value="{{ investment.nav if investment else '' }}" oninput="calcPE()">
+        <span style="font-size:10px;color:var(--grey);">This is the current market value used in portfolio reports</span>
+      </div>
+ <div class="form-group"><label>MOIC (Auto)</label><input type="number" step="0.0001" name="pe_moic" id="pe_moic" class="auto-field" placeholder="(NAV + Distributions) / Called" value="{{ investment.moic if investment else '' }}"></div>
+      <div class="form-group"><label>IRR (%)</label><input type="number" step="0.0001" name="pe_irr" id="pe_irr" placeholder="Internal Rate of Return" value="{{ investment.irr if investment else '' }}"></div>
     </div>
+    <div id="pe_calc" class="calc-box" style="display:none;"></div>
   </div>
 
-  <!-- ══ PRIVATE DEBT PANEL ══ -->
+  {# ══════════════════════════════════════════════════════
+     PANEL: PRIVATE DEBT
+     Field prefix: pd_
+     ══════════════════════════════════════════════════════ #}
   <div class="asset-panel form-section" id="panel-PRIVATE_DEBT">
-    <h3>Private Debt / Direct Lending</h3>
+    <h3>🏦 Private Debt / Direct Lending</h3>
     <div class="form-grid">
-      <div class="form-group"><label>Borrower / Fund</label><input type="text" name="security_name" value="{{ investment.security_name if investment else '' }}"></div>
-      <div class="form-group"><label>Sector</label><input type="text" name="sector" value="{{ investment.sector if investment else '' }}"></div>
-      <div class="form-group"><label>Instrument</label>
-        <select name="sub_type">
-          <option value="Term Loan">Term Loan</option>
-          <option value="Revolving Credit">Revolving Credit</option>
-          <option value="Mezzanine">Mezzanine</option>
-          <option value="Unitranche">Unitranche</option>
+      <div class="form-group"><label>Borrower / Fund *</label><input type="text" name="pd_security_name" id="pd_security_name" placeholder="Name of borrower or credit fund" value="{{ investment.security_name if investment else '' }}"></div>
+      <div class="form-group"><label>Sector</label><input type="text" name="pd_sector" id="pd_sector" value="{{ investment.sector if investment else '' }}"></div>
+      <div class="form-group">
+        <label>Instrument Type</label>
+        <select name="pd_sub_type" id="pd_sub_type">
+          {% for s in ['Term Loan','Revolving Credit','Mezzanine','Unitranche','Bridge Loan','Convertible Note'] %}
+          <option value="{{ s }}" {{ 'selected' if investment and investment.sub_type==s }}>{{ s }}</option>
+          {% endfor %}
         </select>
       </div>
-      <div class="form-group"><label>Trade / Issue Date</label><input type="date" name="trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}"></div>
-      <div class="form-group"><label>Maturity Date</label><input type="date" name="maturity_date" value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}"></div>
-      <div class="form-group"><label>Facility Size</label><input type="number" step="0.01" name="face_value" value="{{ investment.face_value if investment else '' }}"></div>
-      <div class="form-group"><label>Outstanding Balance</label><input type="number" step="0.01" name="outstanding" value="{{ investment.outstanding if investment else '' }}"></div>
-      <div class="form-group"><label>Total Cost</label><input type="number" step="0.01" name="total_cost" value="{{ investment.total_cost if investment else '' }}"></div>
-      <div class="form-group"><label>Interest Rate (%)</label><input type="number" step="0.0001" name="coupon_rate" value="{{ investment.coupon_rate if investment else '' }}"></div>
-      <div class="form-group"><label>Credit Rating</label><input type="text" name="rating" value="{{ investment.rating if investment else '' }}" placeholder="BBB-, B+, etc."></div>
-      <div class="form-group"><label>PIK (Payment in Kind)</label>
-        <select name="pik"><option value="">No</option><option value="1">Yes</option></select>
+      <div class="form-group"><label>Credit Rating</label><input type="text" name="pd_rating" id="pd_rating" placeholder="e.g. BBB−, B+, NR" value="{{ investment.rating if investment else '' }}"></div>
+      <div class="form-group"><label>Issue / Draw-Down Date *</label><input type="date" name="pd_trade_date" id="pd_trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}" onchange="calcPD()"></div>
+      <div class="form-group">
+        <label>Tenor (Years)</label>
+        <input type="number" step="0.5" name="pd_tenor" id="pd_tenor" placeholder="e.g. 3, 5" value="{{ investment.tenor if investment else '' }}" onchange="calcPD()">
+        <span style="font-size:10px;color:var(--grey);">Maturity date auto-calculated</span>
+      </div>
+      <div class="form-group">
+        <label>Maturity Date (Auto from Tenor)</label>
+        <input type="date" name="pd_maturity_date" id="pd_maturity_date"
+               style="background:rgba(39,174,96,.07);border-color:rgba(39,174,96,.35);"
+               value="{{ investment.maturity_date.isoformat() if investment and investment.maturity_date else '' }}">
+        <span style="font-size:10px;color:var(--green);">✓ Auto-calculated from Draw-Down Date + Tenor (years). Override if needed.</span>
+      </div>
+      <div class="form-group">
+        <label>Facility Size *</label>
+        <input type="number" step="0.01" name="pd_face_value" id="pd_face_value" placeholder="Total facility size" value="{{ investment.face_value if investment else '' }}" oninput="calcPD()">
+      </div>
+      <div class="form-group">
+        <label>Amount Drawn (Total Cost) *</label>
+        <input type="number" step="0.01" name="pd_total_cost" id="pd_total_cost" placeholder="Amount actually lent" value="{{ investment.total_cost if investment else '' }}" oninput="calcPD()">
+        <span style="font-size:10px;color:var(--grey);">This amount is deducted from cash</span>
+      </div>
+      <div class="form-group">
+        <label>Outstanding Balance (Auto)</label>
+        <input type="number" step="0.01" name="pd_outstanding" id="pd_outstanding" class="auto-field" placeholder="Current outstanding" value="{{ investment.outstanding if investment else '' }}" oninput="calcPD()">
+        <span style="font-size:10px;color:var(--grey);">Update as borrower repays</span>
+      </div>
+      <div class="form-group"><label>Interest Rate (% p.a.) *</label><input type="number" step="0.0001" name="pd_coupon_rate" id="pd_coupon_rate" placeholder="e.g. 18.0000" value="{{ investment.coupon_rate if investment else '' }}" oninput="calcPD()"></div>
+      <div class="form-group">
+        <label>PIK (Payment in Kind)</label>
+        <select name="pd_pik" id="pd_pik">
+          <option value="">No</option><option value="1" {{ 'selected' if investment and investment.pik }}>Yes</option>
+        </select>
       </div>
     </div>
+    <div id="pd_calc" class="calc-box" style="display:none;"></div>
   </div>
 
-  <!-- ══ MUTUAL FUNDS PANEL ══ -->
+  {# ══════════════════════════════════════════════════════
+     PANEL: MUTUAL FUNDS
+     Field prefix: mf_
+     ══════════════════════════════════════════════════════ #}
   <div class="asset-panel form-section" id="panel-MUTUAL_FUNDS">
-    <h3>Mutual Funds & Unit Trusts</h3>
+    <h3>📊 Mutual Funds &amp; Unit Trusts</h3>
     <div class="form-grid">
-      <div class="form-group"><label>Fund Name</label>
-        <select name="security_name" id="mf-name" onchange="fillMF()">
+      <div class="form-group">
+        <label>Fund Name *</label>
+        <select name="mf_security_name" id="mf_security_name" onchange="fillMF()">
           <option value="">— Select Fund —</option>
-          {% for f in ['AM Fund Tier 1','AM Fund Tier 2','Databank Bfund','Databank Mfund',
-                       'EDC Balanced Fund','EDC Fixed Income Unit Trust','Republic Equity Trust',
-                       'Republic Future Plan Trust','Republic Unit Trust','Stanlib Income Fund Trust',
-                       'UMB Balanced Fund'] %}
+          {% for f in ['AM Fund Tier 1','AM Fund Tier 2','Databank Bfund','Databank Mfund','EDC Balanced Fund','EDC Fixed Income Unit Trust','Republic Equity Trust','Republic Future Plan Trust','Republic Unit Trust','Stanlib Income Fund Trust','UMB Balanced Fund'] %}
           <option value="{{ f }}" {{ 'selected' if investment and investment.security_name==f }}>{{ f }}</option>
           {% endfor %}
-          <option value="Other">Other</option>
+          <option value="Other">Other Fund</option>
         </select>
       </div>
-      <div class="form-group"><label>Fund Type</label>
-        <select name="sub_type"><option value="Mutual Fund">Mutual Fund</option><option value="Unit Trust">Unit Trust</option><option value="REIT">REIT</option></select>
+      <div class="form-group">
+        <label>Fund Type</label>
+        <select name="mf_sub_type">
+          <option value="Mutual Fund">Mutual Fund</option><option value="Unit Trust">Unit Trust</option><option value="REIT">REIT</option>
+        </select>
       </div>
-      <div class="form-group"><label>Trade Date</label><input type="date" name="trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}"></div>
-      <div class="form-group"><label>Units Held</label><input type="number" step="0.0001" name="quantity" id="mf-qty" value="{{ investment.quantity if investment else '' }}" onchange="calcMF()"></div>
-      <div class="form-group"><label>Unit Cost</label><input type="number" step="0.0001" name="unit_cost" id="mf-ucost" value="{{ investment.unit_cost if investment else '' }}" onchange="calcMF()"></div>
-      <div class="form-group"><label>Current NAV Price</label><input type="number" step="0.0001" name="current_price" id="mf-price" value="{{ investment.current_price if investment else '' }}" onchange="calcMF()"></div>
-      <div class="form-group"><label>Total Cost (Auto)</label><input type="number" step="0.01" name="total_cost" id="mf-cost" value="{{ investment.total_cost if investment else '' }}" readonly style="background:rgba(255,255,255,0.02);"></div>
+      <div class="form-group"><label>Trade / Investment Date *</label><input type="date" name="mf_trade_date" id="mf_trade_date" value="{{ investment.trade_date.isoformat() if investment and investment.trade_date else '' }}"></div>
+      <div class="form-group"><label>Units / Shares Purchased *</label><input type="number" step="0.0001" name="mf_quantity" id="mf_quantity" placeholder="Number of units" value="{{ investment.quantity if investment else '' }}" oninput="calcMF()"></div>
+      <div class="form-group"><label>Unit / NAV Price at Purchase *</label><input type="number" step="0.0001" name="mf_unit_cost" id="mf_unit_cost" placeholder="Price per unit" value="{{ investment.unit_cost if investment else '' }}" oninput="calcMF()"></div>
+      <div class="form-group"><label>Current NAV Price</label><input type="number" step="0.0001" name="mf_current_price" id="mf_current_price" placeholder="Latest NAV per unit" value="{{ investment.current_price if investment else '' }}" oninput="calcMF()"></div>
+ <div class="form-group"><label>Total Cost (Auto)</label><input type="number" step="0.01" name="mf_total_cost" id="mf_total_cost" class="auto-field" placeholder="Auto = Units × Unit Cost" value="{{ investment.total_cost if investment else '' }}"></div>
     </div>
+    <div id="mf_calc" class="calc-box" style="display:none;"></div>
   </div>
 
-  <!-- NOTES -->
+  {# ── Notes ── #}
   <div class="form-section">
     <h3>Notes</h3>
     <div class="form-group">
-      <textarea name="notes" rows="3" placeholder="Internal notes or remarks…" style="resize:vertical;">{{ investment.notes if investment else '' }}</textarea>
+      <textarea name="notes" rows="3" placeholder="Internal remarks, deal notes, etc.…" style="resize:vertical;width:100%;">{{ investment.notes if investment else '' }}</textarea>
     </div>
   </div>
 
   <div class="flex gap-2" style="justify-content:flex-end;">
-    <a href="{{ url_for('admin.investments') }}" class="btn btn-secondary">Cancel</a>
-    <button type="submit" class="btn btn-primary">{{ 'Update Investment' if investment else 'Record Investment' }}</button>
+    <a href="{{ url_for('admin.accounts') }}" class="btn btn-secondary">Cancel</a>
+    <button type="submit" class="btn btn-primary" id="submit-btn">
+      {{ 'Update Investment' if investment else 'Record Investment' }}
+    </button>
   </div>
   </form>
 </div>
 {% endblock %}
 {% block extra_js %}
 <script>
-// Global stocks info
-const globalStocksInfo = {
-  TSLA: {name:'Tesla Inc.', exchange:'NASDAQ', sector:'Automotive/Tech'},
-  AAPL: {name:'Apple Inc.', exchange:'NASDAQ', sector:'Technology'},
-  MSFT: {name:'Microsoft Corp.', exchange:'NASDAQ', sector:'Technology'},
-  GOOGL:{name:'Alphabet Inc.', exchange:'NASDAQ', sector:'Technology'},
-  META: {name:'Meta Platforms Inc.', exchange:'NASDAQ', sector:'Technology'},
-  AMZN: {name:'Amazon.com Inc.', exchange:'NASDAQ', sector:'Consumer'},
-  NVDA: {name:'NVIDIA Corp.', exchange:'NASDAQ', sector:'Technology'},
-  TM:   {name:'Toyota Motor Corp.', exchange:'NYSE', sector:'Automotive'},
-  JPM:  {name:'JPMorgan Chase', exchange:'NYSE', sector:'Financial Services'},
-  XOM:  {name:'Exxon Mobil', exchange:'NYSE', sector:'Energy'},
-  'BRK.B':{name:'Berkshire Hathaway B', exchange:'NYSE', sector:'Financial Services'},
-  V:    {name:'Visa Inc.', exchange:'NYSE', sector:'Financial Services'},
+// ── Stock reference data ────────────────────────────────────────────────────
+const GSE_INFO = {
+  ACCESS:{name:'Access Bank Ghana PLC',sector:'Financial Services'},
+  ADB:{name:'Agricultural Development Bank PLC',sector:'Financial Services'},
+  ASG:{name:'Asante Gold Corporation',sector:'Mining'},
+  ALLGH:{name:'Atlantic Lithium Ltd',sector:'Mining'},
+  BOPP:{name:'Benso Palm Plantation PLC',sector:'Agriculture'},
+  CAL:{name:'Cal Bank PLC',sector:'Financial Services'},
+  EGH:{name:'Ecobank Ghana PLC',sector:'Financial Services'},
+  EGL:{name:'Enterprise Group PLC',sector:'Insurance'},
+  ETI:{name:'Ecobank Transnational Inc.',sector:'Financial Services'},
+  FML:{name:'Fan Milk PLC',sector:'Consumer Goods'},
+  GCB:{name:'GCB Bank PLC',sector:'Financial Services'},
+  GGBL:{name:'Guinness Ghana Breweries PLC',sector:'Consumer Goods'},
+  GOIL:{name:'Ghana Oil Company PLC',sector:'Energy'},
+  MAC:{name:'Mega African Capital PLC',sector:'Financial Services'},
+  MTNGH:{name:'Scancom PLC (MTN Ghana)',sector:'Telecom'},
+  RBGH:{name:'Republic Bank (Ghana) PLC',sector:'Financial Services'},
+  SCB:{name:'Standard Chartered Bank Gh. PLC',sector:'Financial Services'},
+  SIC:{name:'SIC Insurance Company PLC',sector:'Insurance'},
+  SOGEGH:{name:'Societe Generale Ghana PLC',sector:'Financial Services'},
+  TOTAL:{name:'TotalEnergies Marketing Ghana PLC',sector:'Energy'},
+  TLW:{name:'Tullow Oil PLC',sector:'Energy'},
+  UNIL:{name:'Unilever Ghana PLC',sector:'Consumer Goods'},
 };
-const gseStocksInfo = {
-  ACCESS:{name:'Access Bank Ghana PLC', sector:'Financial Services'},
-  ADB:   {name:'Agricultural Development Bank PLC', sector:'Financial Services'},
-  ASG:   {name:'Asante Gold Corporation', sector:'Mining'},
-  ALLGH: {name:'Atlantic Lithium Ltd', sector:'Mining'},
-  BOPP:  {name:'Benso Palm Plantation PLC', sector:'Agriculture'},
-  CAL:   {name:'Cal Bank PLC', sector:'Financial Services'},
-  EGH:   {name:'Ecobank Ghana PLC', sector:'Financial Services'},
-  EGL:   {name:'Enterprise Group PLC', sector:'Insurance'},
-  ETI:   {name:'Ecobank Transnational Inc.', sector:'Financial Services'},
-  FML:   {name:'Fan Milk PLC', sector:'Consumer Goods'},
-  GCB:   {name:'GCB Bank PLC', sector:'Financial Services'},
-  GGBL:  {name:'Guinness Ghana Breweries PLC', sector:'Consumer Goods'},
-  GOIL:  {name:'Ghana Oil Company PLC', sector:'Energy'},
-  MAC:   {name:'Mega African Capital PLC', sector:'Financial Services'},
-  MTNGH: {name:'Scancom PLC (MTN Ghana)', sector:'Telecom'},
-  RBGH:  {name:'Republic Bank (Ghana) PLC', sector:'Financial Services'},
-  SCB:   {name:'Standard Chartered Bank Gh. PLC', sector:'Financial Services'},
-  SIC:   {name:'SIC Insurance Company PLC', sector:'Insurance'},
-  SOGEGH:{name:'Societe Generale Ghana PLC', sector:'Financial Services'},
-  TOTAL: {name:'TotalEnergies Marketing Ghana PLC', sector:'Energy'},
-  TLW:   {name:'Tullow Oil PLC', sector:'Energy'},
-  UNIL:  {name:'Unilever Ghana PLC', sector:'Consumer Goods'},
+const GL_INFO = {
+  TSLA:{name:'Tesla Inc.',exchange:'NASDAQ',sector:'Automotive/Tech'},
+  AAPL:{name:'Apple Inc.',exchange:'NASDAQ',sector:'Technology'},
+  MSFT:{name:'Microsoft Corp.',exchange:'NASDAQ',sector:'Technology'},
+  GOOGL:{name:'Alphabet Inc.',exchange:'NASDAQ',sector:'Technology'},
+  META:{name:'Meta Platforms Inc.',exchange:'NASDAQ',sector:'Technology'},
+  AMZN:{name:'Amazon.com Inc.',exchange:'NASDAQ',sector:'Consumer'},
+  NVDA:{name:'NVIDIA Corp.',exchange:'NASDAQ',sector:'Technology'},
+  TM:{name:'Toyota Motor Corp.',exchange:'NYSE',sector:'Automotive'},
+  JPM:{name:'JPMorgan Chase',exchange:'NYSE',sector:'Financial Services'},
+  XOM:{name:'Exxon Mobil',exchange:'NYSE',sector:'Energy'},
+  'BRK.B':{name:'Berkshire Hathaway B',exchange:'NYSE',sector:'Financial Services'},
+  V:{name:'Visa Inc.',exchange:'NYSE',sector:'Financial Services'},
 };
 
+// ── Live stock prices ────────────────────────────────────────────────────────
+let livePrices = {};
+fetch('/api/stocks').then(r=>r.json()).then(d=>{
+  d.forEach(s=>{ livePrices[s.symbol]=s.price; });
+}).catch(()=>{});
+
+// ── Panel switch ─────────────────────────────────────────────────────────────
 function switchPanel() {
   const cls = document.getElementById('asset-class').value;
-  document.querySelectorAll('.asset-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.asset-panel').forEach(p=>p.classList.remove('active'));
   if (cls) {
-    const panel = document.getElementById('panel-' + cls);
-    if (panel) panel.classList.add('active');
+    const p = document.getElementById('panel-'+cls);
+    if (p) p.classList.add('active');
   }
+  updateCashBanner();
 }
 
-function today() {
-  return new Date().toISOString().split('T')[0];
+// ── Cash banner ──────────────────────────────────────────────────────────────
+function updateCashBanner() {
+  const sel = document.getElementById('acct-sel');
+  const opt = sel.options[sel.selectedIndex];
+  const banner = document.getElementById('cash-banner');
+  if (!opt || !opt.value) { banner.style.display='none'; return; }
+  const cash = parseFloat(opt.dataset.cash||0);
+  const ccy  = opt.dataset.currency || 'GHS';
+  banner.style.display = 'block';
+  banner.style.borderColor = cash > 0 ? 'rgba(39,174,96,.4)' : 'rgba(231,76,60,.4)';
+  banner.innerHTML = cash > 0
+    ? `✓ Available Cash: <strong style="color:var(--gold);">${ccy} ${cash.toLocaleString('en-GH',{minimumFractionDigits:2})}</strong> — investment cost must not exceed this amount.`
+    : `⚠ <strong style="color:var(--red);">No approved cash.</strong> A deposit must be approved before recording investments.`;
 }
+
+// ── Date helpers ─────────────────────────────────────────────────────────────
 function addDays(dateStr, days) {
-  const d = new Date(dateStr);
+  const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + days);
   return d.toISOString().split('T')[0];
 }
+function addYears(dateStr, years) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const wholeYrs = Math.floor(years);
+  const frac = years - wholeYrs;
+  d.setFullYear(d.getFullYear() + wholeYrs);
+  if (frac > 0) d.setDate(d.getDate() + Math.round(frac * 365));
+  return d.toISOString().split('T')[0];
+}
 function daysBetween(d1, d2) {
-  return Math.round((new Date(d2) - new Date(d1)) / 86400000);
+  return Math.max(0, Math.round((new Date(d2+'T00:00:00') - new Date(d1+'T00:00:00')) / 86400000));
+}
+function numFmt(n) { return (n||0).toLocaleString('en-GH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function showCalc(id, rows) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = 'block';
+  el.innerHTML = rows.map(([l,v])=>`<div class="calc-row"><span>${l}</span><span>${v}</span></div>`).join('');
 }
 
-// ── MONEY MARKET ──────────────────────────────────────────────────────────
+// ── MONEY MARKET ─────────────────────────────────────────────────────────────
 async function calcMM() {
-  const face = parseFloat(document.getElementById('mm-face').value);
-  const rate = parseFloat(document.getElementById('mm-rate').value);
-  const tenor = parseInt(document.getElementById('mm-tenor').value);
-  const tradeDate = document.getElementById('mm-trade-date').value;
-  if (!face || !rate || !tenor || !tradeDate) return;
+  const face   = parseFloat(document.getElementById('mm_face_value')?.value||0);
+  const rate   = parseFloat(document.getElementById('mm_interest_rate')?.value||0);
+  const tenor  = parseInt(document.getElementById('mm_tenor')?.value||0);
+  const td     = document.getElementById('mm_trade_date')?.value;
+  if (!face || !rate || !tenor || !td) return;
   try {
-    const r = await fetch(`/api/tbill-calc?face=${face}&rate=${rate}&tenor=${tenor}&trade_date=${tradeDate}&sub_type=FD`);
+    const r = await fetch(`/api/tbill-calc?face=${face}&rate=${rate}&tenor=${tenor}&trade_date=${td}&sub_type=FD`);
     const d = await r.json();
-    document.getElementById('mm-cost').value = d.principal.toFixed(2);
-    document.getElementById('mm-maturity').value = d.maturity_date;
-    const res = document.getElementById('mm-result');
-    res.style.display = 'block';
-    res.innerHTML = `<div class="calc-row"><span>Principal / Cost:</span><span>${d.principal.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
-      <div class="calc-row"><span>Days Run:</span><span>${d.days_run}</span></div>
-      <div class="calc-row"><span>Days to Maturity:</span><span>${d.days_to_mat}</span></div>
-      <div class="calc-row"><span>Accrued Interest:</span><span>${d.accrued.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
-      <div class="calc-row"><span>Current MTM Value:</span><span>${d.mkt_value.toLocaleString('en',{minimumFractionDigits:2})}</span></div>`;
+    setV('mm_total_cost', d.principal.toFixed(2));
+    setV('mm_maturity_date', d.maturity_date);
+    showCalc('mm_calc',[
+      ['Principal (Cost to fund)', numFmt(d.principal)],
+      ['Maturity Date', d.maturity_date],
+      ['Days Run', d.days_run],
+      ['Days to Maturity', d.days_to_mat],
+      ['Accrued Interest', numFmt(d.accrued)],
+      ['Current MTM Value', numFmt(d.mkt_value)],
+    ]);
   } catch(e) {}
 }
 
-// ── T-BILLS ────────────────────────────────────────────────────────────────
+// ── GOVERNMENT SECURITIES ────────────────────────────────────────────────────
 async function calcGS() {
-  const subtype = document.getElementById('gs-subtype').value;
-  let tenor = parseInt(document.getElementById('gs-tenor').value);
+  const subtype = document.getElementById('gs_sub_type')?.value || '';
+  let tenor = parseInt(document.getElementById('gs_tenor')?.value||0);
+  // Auto-fill tenor from sub-type
   if (!tenor) {
-    if (subtype.includes('91')) tenor = 91;
-    else if (subtype.includes('182')) tenor = 182;
-    else if (subtype.includes('364')) tenor = 364;
-    else tenor = 365;
-    document.getElementById('gs-tenor').value = tenor;
+    if (subtype.includes('91')) tenor=91;
+    else if (subtype.includes('182')) tenor=182;
+    else if (subtype.includes('364')) tenor=364;
+    else if (subtype.includes('1-Year')) tenor=365;
+    else if (subtype.includes('2-Year')) tenor=730;
+    else if (subtype.includes('3-Year')) tenor=1095;
+    setV('gs_tenor', tenor);
   }
-  const face = parseFloat(document.getElementById('gs-face').value);
-  const rate = parseFloat(document.getElementById('gs-rate').value);
-  const tradeDate = document.getElementById('gs-trade').value;
-  if (!face || !rate || !tradeDate) return;
+  const face = parseFloat(document.getElementById('gs_face_value')?.value||0);
+  const rate = parseFloat(document.getElementById('gs_interest_rate')?.value||0);
+  const td   = document.getElementById('gs_trade_date')?.value;
+  if (!face || !rate || !td) return;
   try {
-    const r = await fetch(`/api/tbill-calc?face=${face}&rate=${rate}&tenor=${tenor}&trade_date=${tradeDate}&sub_type=BILL`);
+    const r = await fetch(`/api/tbill-calc?face=${face}&rate=${rate}&tenor=${tenor}&trade_date=${td}&sub_type=BILL`);
     const d = await r.json();
-    document.getElementById('gs-cost').value = d.principal.toFixed(2);
-    document.getElementById('gs-maturity').value = d.maturity_date;
-    const res = document.getElementById('gs-result');
-    res.style.display = 'block';
-    res.innerHTML = `<div class="calc-row"><span>Principal (Cost):</span><span>${d.principal.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
-      <div class="calc-row"><span>Days Run:</span><span>${d.days_run}</span></div>
-      <div class="calc-row"><span>Days to Maturity:</span><span>${d.days_to_mat}</span></div>
-      <div class="calc-row"><span>Accrued Interest:</span><span>${d.accrued.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
-      <div class="calc-row"><span>MTM Value:</span><span>${d.mkt_value.toLocaleString('en',{minimumFractionDigits:2})}</span></div>`;
+    setV('gs_total_cost', d.principal.toFixed(2));
+    setV('gs_maturity_date', d.maturity_date);
+    showCalc('gs_calc',[
+      ['Discount Price (Cost)', numFmt(d.principal)],
+      ['Maturity Date', d.maturity_date],
+      ['Tenor', tenor+' days'],
+      ['Days Run', d.days_run],
+      ['Days to Maturity', d.days_to_mat],
+      ['Accrued Interest', numFmt(d.accrued)],
+      ['Current MTM Value', numFmt(d.mkt_value)],
+    ]);
   } catch(e) {}
 }
 
-// ── BONDS ──────────────────────────────────────────────────────────────────
-async function calcBond() {
-  const face = parseFloat(document.getElementById('bond-face').value);
-  const cpn  = parseFloat(document.getElementById('bond-cpn').value);
-  const cleanPx = parseFloat(document.getElementById('bond-cleanpx').value);
-  const tradeDate = document.getElementById('bond-trade').value;
-  const lastCpn = document.getElementById('bond-lastcpn').value;
-  const tenor = document.getElementById('bond-tenor').value;
-  if (!face || !tradeDate) return;
-  try {
-    const params = new URLSearchParams({face, coupon: cpn||0, clean_px: cleanPx||100,
-      trade_date: tradeDate, last_cpn: lastCpn||tradeDate,
-      sub_type: 'BOND', tenor});
-    const r = await fetch('/api/bond-calc?' + params.toString());
-    const d = await r.json();
-    if (d.error) return;
-    document.getElementById('bond-mktval').value = d.mkt_value.toFixed(2);
-    if (d.maturity_date) document.getElementById('bond-maturity').value = d.maturity_date;
-    const res = document.getElementById('bond-result');
-    res.style.display = 'block';
-    res.innerHTML = `<div class="calc-row"><span>Accrued Interest:</span><span>${d.accrued.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
-      <div class="calc-row"><span>Days Run:</span><span>${d.days_run}</span></div>
-      <div class="calc-row"><span>Days to Maturity:</span><span>${d.days_to_mat}</span></div>
-      <div class="calc-row"><span>Market Value (Dirty Price):</span><span>${d.mkt_value.toLocaleString('en',{minimumFractionDigits:2})}</span></div>`;
-  } catch(e) {}
+// ── BONDS ─────────────────────────────────────────────────────────────────────
+function calcBond() {
+  const face    = parseFloat(document.getElementById('bond_face_value')?.value||0);
+  const cpn     = parseFloat(document.getElementById('bond_coupon_rate')?.value||0);
+  const cleanPx = parseFloat(document.getElementById('bond_clean_price')?.value||100);
+  const td      = document.getElementById('bond_trade_date')?.value;
+  const lastCpn = document.getElementById('bond_last_coupon_date')?.value;
+  const tenor   = parseFloat(document.getElementById('bond_tenor')?.value||0);
+
+  // ── 1. Maturity date — always recompute from trade_date + tenor (years) ─
+  if (td && tenor > 0) {
+    setV('bond_maturity_date', addYears(td, tenor));
+  }
+
+  const maturity = document.getElementById('bond_maturity_date')?.value;
+  const today    = new Date().toISOString().split('T')[0];
+  const d2m      = maturity ? daysBetween(today, maturity) : 0;
+  const dRun     = td ? daysBetween(td, today) : 0;
+
+  // ── 2. Dirty price = (clean_px/100) × face + accrued ───────────────────
+  if (face > 0) {
+    const ref     = lastCpn || td || today;
+    const accDays = ref ? daysBetween(ref, today) : 0;
+    const accrued = cpn > 0 ? (face * (cpn/100) * accDays) / 365 : 0;
+    const dirty   = (cleanPx/100) * face + accrued;
+    setV('bond_total_cost', dirty.toFixed(2));
+    showCalc('bond_calc',[
+      ['Face Value',            numFmt(face)],
+      ['Tenor',                 tenor + ' years'],
+      ['Trade Date',            td || '—'],
+      ['Maturity Date (Auto)',  maturity || 'Enter tenor'],
+      ['Days Run',              dRun],
+      ['Days to Maturity',      d2m],
+      ['Coupon Rate (p.a.)',    (cpn||0).toFixed(4) + '%'],
+      ['Last Coupon Date',      lastCpn || (td || '—')],
+      ['Accrued Days',          accDays],
+      ['Accrued Interest',      numFmt(accrued)],
+      ['Clean Price',           cleanPx.toFixed(4) + '% of par'],
+      ['Dirty Price (Cost / MtM Value)', numFmt(dirty)],
+    ]);
+  }
 }
 
-async function calcEuro() {
-  const face = parseFloat(document.getElementById('euro-face').value);
-  const cpn  = parseFloat(document.getElementById('euro-cpn').value);
-  const cleanPx = parseFloat(document.getElementById('euro-cleanpx').value);
-  const tradeDate = document.getElementById('euro-trade').value;
-  const lastCpn = document.getElementById('euro-lastcpn').value;
-  if (!face || !tradeDate) return;
-  try {
-    const params = new URLSearchParams({face, coupon: cpn||0, clean_px: cleanPx||100,
-      trade_date: tradeDate, last_cpn: lastCpn||tradeDate, sub_type: 'EUROBOND'});
-    const r = await fetch('/api/bond-calc?' + params.toString());
-    const d = await r.json();
-    if (!d.error) document.getElementById('euro-mktval').value = d.mkt_value.toFixed(2);
-    const res = document.getElementById('euro-result');
-    res.style.display = 'block';
-    res.innerHTML = `<div class="calc-row"><span>Accrued Interest:</span><span>${(d.accrued||0).toLocaleString('en',{minimumFractionDigits:2})}</span></div>
-      <div class="calc-row"><span>Days Run:</span><span>${d.days_run||0}</span></div>
-      <div class="calc-row"><span>Days to Maturity:</span><span>${d.days_to_mat||0}</span></div>
-      <div class="calc-row"><span>Market Value (Dirty Price):</span><span>${(d.mkt_value||0).toLocaleString('en',{minimumFractionDigits:2})}</span></div>`;
-  } catch(e) {}
+// ── EUROBONDS ────────────────────────────────────────────────────────────────
+function calcEuro() {
+  const face    = parseFloat(document.getElementById('euro_face_value')?.value||0);
+  const cpn     = parseFloat(document.getElementById('euro_coupon_rate')?.value||0);
+  const cleanPx = parseFloat(document.getElementById('euro_clean_price')?.value||100);
+  const td      = document.getElementById('euro_trade_date')?.value;
+  const lastCpn = document.getElementById('euro_last_coupon_date')?.value;
+  const tenor   = parseFloat(document.getElementById('euro_tenor')?.value||0);
+
+  // Maturity auto-calc from tenor in years — always recompute
+  if (td && tenor > 0) {
+    setV('euro_maturity_date', addYears(td, tenor));
+  }
+
+  const maturity = document.getElementById('euro_maturity_date')?.value;
+  const today    = new Date().toISOString().split('T')[0];
+  const d2m      = maturity ? daysBetween(today, maturity) : 0;
+  const dRun     = td ? daysBetween(td, today) : 0;
+
+  if (face && cpn) {
+    const ref     = lastCpn || td || today;
+    const accDays = daysBetween(ref, today);
+    const accrued = (face * (cpn/100) * accDays) / 365;
+    const dirty   = (cleanPx/100) * face + accrued;
+    setV('euro_total_cost', dirty.toFixed(2));
+    showCalc('euro_calc',[
+      ['Face Value (Foreign CCY)', numFmt(face)],
+      ['Tenor', tenor+' years → Maturity: '+(maturity||'?')],
+      ['Days Run', dRun],
+      ['Days to Maturity', d2m],
+      ['Coupon Rate', (cpn||0).toFixed(4)+'% p.a.'],
+      ['Accrued Interest', numFmt(accrued)],
+      ['Clean Price', cleanPx.toFixed(4)+'%'],
+      ['Dirty Price (Market Value)', numFmt(dirty)],
+    ]);
+  }
 }
 
-function calcEquity(prefix) {
-  const qty   = parseFloat(document.getElementById(prefix+'-qty').value) || 0;
-  const ucost = parseFloat(document.getElementById(prefix+'-ucost').value) || 0;
-  document.getElementById(prefix+'-cost').value = (qty * ucost).toFixed(2);
+// ── GSE EQUITIES ─────────────────────────────────────────────────────────────
+function calcGSE() {
+  const qty   = parseFloat(document.getElementById('gse_quantity')?.value||0);
+  const ucost = parseFloat(document.getElementById('gse_unit_cost')?.value||0);
+  const cprice= parseFloat(document.getElementById('gse_current_price')?.value||0);
+  const cost  = qty * ucost;
+  const mktval= qty * (cprice||ucost);
+  const gain  = mktval - cost;
+  setV('gse_total_cost', cost.toFixed(2));
+  if (qty && ucost) {
+    showCalc('gse_calc',[
+      ['Quantity (Shares)', qty.toLocaleString()],
+      ['Unit Cost', numFmt(ucost)],
+      ['Total Cost', numFmt(cost)],
+      ['Current Price', cprice ? numFmt(cprice) : 'Not set'],
+      ['Market Value', cprice ? numFmt(mktval) : 'Not set'],
+      ['Unrealised Gain/Loss', cprice ? numFmt(gain) : 'N/A'],
+      ['Return', cprice && cost ? ((gain/cost)*100).toFixed(2)+'%' : 'N/A'],
+    ]);
+  }
 }
-function calcMF() { calcEquity('mf'); }
-
 function fillGSE() {
-  const sym = document.getElementById('gse-symbol').value;
-  const info = gseStocksInfo[sym];
+  const sym = document.getElementById('gse_symbol').value;
+  const info = GSE_INFO[sym];
   if (info) {
-    document.getElementById('gse-name').value = info.name;
-    document.getElementById('gse-sector').value = info.sector;
-    // Try to populate price from live data
-    fetch('/api/stocks').then(r=>r.json()).then(stocks=>{
-      const s = stocks.find(x=>x.symbol===sym);
-      if (s) document.getElementById('gse-price').value = s.price;
-    }).catch(()=>{});
+    setV('gse_security_name', info.name);
+    setV('gse_sector', info.sector);
+    if (livePrices[sym]) setV('gse_current_price', livePrices[sym]);
+    calcGSE();
   }
 }
 
+// ── GLOBAL EQUITIES ───────────────────────────────────────────────────────────
+function calcGL() {
+  const qty   = parseFloat(document.getElementById('gl_quantity')?.value||0);
+  const ucost = parseFloat(document.getElementById('gl_unit_cost')?.value||0);
+  const cprice= parseFloat(document.getElementById('gl_current_price')?.value||0);
+  const cost  = qty * ucost;
+  const mktval= qty * (cprice||ucost);
+  const gain  = mktval - cost;
+  setV('gl_total_cost', cost.toFixed(2));
+  if (qty && ucost) {
+    showCalc('gl_calc',[
+      ['Quantity (Shares)', qty.toLocaleString()],
+      ['Unit Cost (USD)', numFmt(ucost)],
+      ['Total Cost (USD)', numFmt(cost)],
+      ['Current Price (USD)', cprice ? numFmt(cprice) : 'Not set'],
+      ['Market Value (USD)', cprice ? numFmt(mktval) : 'Not set'],
+      ['Unrealised Gain/Loss (USD)', cprice ? numFmt(gain) : 'N/A'],
+    ]);
+  }
+}
 function fillGlobal() {
-  const sym = document.getElementById('gl-symbol').value;
-  const info = globalStocksInfo[sym];
+  const sym = document.getElementById('gl_symbol').value;
+  const info = GL_INFO[sym];
   if (info) {
-    document.getElementById('gl-name').value = info.name;
-    document.getElementById('gl-exchange').value = info.exchange;
-    document.getElementById('gl-sector').value = info.sector;
-    fetch('/api/stocks').then(r=>r.json()).then(stocks=>{
-      const s = stocks.find(x=>x.symbol===sym);
-      if (s) document.getElementById('gl-price').value = s.price;
-    }).catch(()=>{});
+    setV('gl_security_name', info.name);
+    setV('gl_exchange', info.exchange);
+    setV('gl_sector', info.sector);
+    if (livePrices[sym]) setV('gl_current_price', livePrices[sym]);
+    calcGL();
   }
 }
 
-// Show cash balance when account selected
-document.getElementById('account-select').addEventListener('change', async function() {
-  const acc = this.value;
-  if (!acc) return;
-  try {
-    const r = await fetch('/api/portfolio-summary/'+acc);
-    const d = await r.json();
-    document.getElementById('cash-info').innerHTML =
-      `<span style="color:var(--gold);">💰 Available Cash: ${d.currency} ${d.cash_balance.toLocaleString('en',{minimumFractionDigits:2})}</span>
-       &nbsp;|&nbsp; Portfolio Value: ${d.total_portfolio.toLocaleString('en',{minimumFractionDigits:2})}`;
-  } catch(e) {}
-});
+// ── PRIVATE EQUITY ────────────────────────────────────────────────────────────
+function calcPE() {
+  const committed = parseFloat(document.getElementById('pe_committed')?.value||0);
+  const called    = parseFloat(document.getElementById('pe_called')?.value||0);
+  const distrib   = parseFloat(document.getElementById('pe_distributions')?.value||0);
+  const nav       = parseFloat(document.getElementById('pe_nav')?.value||0);
+  const uncalled  = committed - called;
+  const moic      = (called > 0) ? ((nav + distrib) / called) : 0;
 
-// Init if editing
-window.addEventListener('DOMContentLoaded', () => {
+  setV('pe_uncalled',  uncalled > 0 ? uncalled.toFixed(2) : '0.00');
+  setV('pe_total_cost', called.toFixed(2)); // cost = called amount
+  if (moic > 0) setV('pe_moic', moic.toFixed(4));
+
+  if (called > 0 || nav > 0) {
+    showCalc('pe_calc',[
+      ['Committed Amount', numFmt(committed)],
+      ['Called / Drawn', numFmt(called)],
+      ['Uncalled Remaining', numFmt(uncalled)],
+      ['Distributions Received', numFmt(distrib)],
+      ['NAV / Fair Value', numFmt(nav)],
+      ['MOIC (auto)', moic > 0 ? moic.toFixed(4)+'×' : 'Awaiting NAV'],
+      ['Total Value (NAV + Distrib)', numFmt(nav + distrib)],
+      ['Cash Deducted from Account', numFmt(called)],
+    ]);
+  }
+}
+
+// ── PRIVATE DEBT ──────────────────────────────────────────────────────────────
+function calcPD() {
+  const facility    = parseFloat(document.getElementById('pd_face_value')?.value||0);
+  const drawn       = parseFloat(document.getElementById('pd_total_cost')?.value||0);
+  const outstanding = parseFloat(document.getElementById('pd_outstanding')?.value||0);
+  const rate        = parseFloat(document.getElementById('pd_coupon_rate')?.value||0);
+  const td          = document.getElementById('pd_trade_date')?.value;
+  const tenor       = parseFloat(document.getElementById('pd_tenor')?.value||0);
+
+  // Auto-calculate maturity from tenor (years) — always recompute
+  if (td && tenor > 0) {
+    setV('pd_maturity_date', addYears(td, tenor));
+  }
+
+  // If outstanding not set, default to drawn amount
+  const outEl = document.getElementById('pd_outstanding');
+  if (outEl && !outEl.value && drawn > 0) {
+    outEl.value = drawn.toFixed(2);
+  }
+
+  const out  = outstanding || drawn;
+  const maturity = document.getElementById('pd_maturity_date')?.value;
+  const today = new Date().toISOString().split('T')[0];
+  const d2m   = maturity ? daysBetween(today, maturity) : 0;
+  const dRun  = td ? daysBetween(td, today) : 0;
+
+  // Accrued interest on outstanding
+  const annualInterest = out * (rate/100);
+  const accrued = td ? (out * (rate/100) * dRun / 365) : 0;
+
+  if (drawn > 0 || out > 0) {
+    showCalc('pd_calc',[
+      ['Facility Size', numFmt(facility)],
+      ['Amount Drawn (Cost)', numFmt(drawn)],
+      ['Outstanding Balance', numFmt(out)],
+      ['Interest Rate', rate.toFixed(4)+'% p.a.'],
+      ['Annual Interest Income', numFmt(annualInterest)],
+      ['Days Run', dRun],
+      ['Days to Maturity', d2m],
+      ['Accrued Interest to Date', numFmt(accrued)],
+      ['Cash Deducted from Account', numFmt(drawn)],
+    ]);
+  }
+}
+
+// ── MUTUAL FUNDS ──────────────────────────────────────────────────────────────
+function calcMF() {
+  const qty   = parseFloat(document.getElementById('mf_quantity')?.value||0);
+  const ucost = parseFloat(document.getElementById('mf_unit_cost')?.value||0);
+  const nav   = parseFloat(document.getElementById('mf_current_price')?.value||0);
+  const cost  = qty * ucost;
+  const mktval= qty * (nav||ucost);
+  const gain  = mktval - cost;
+  setV('mf_total_cost', cost.toFixed(2));
+  if (qty && ucost) {
+    showCalc('mf_calc',[
+      ['Units Held', qty.toLocaleString('en-GH',{minimumFractionDigits:4})],
+      ['Unit Cost', numFmt(ucost)],
+      ['Total Cost', numFmt(cost)],
+      ['Current NAV per Unit', nav ? numFmt(nav) : 'Not set'],
+      ['Portfolio Value', nav ? numFmt(mktval) : 'Not set'],
+      ['Unrealised Gain/Loss', nav ? numFmt(gain) : 'N/A'],
+    ]);
+  }
+}
+function fillMF() {
+  // Could add fund-specific lookups here
+}
+
+// ── Utility ────────────────────────────────────────────────────────────────────
+function setV(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.value = val;
+}
+
+// ── Form submission: copy prefixed field values to canonical names ────────────
+// The server reads prefixed field names, so nothing to do here
+// But validate active panel has required fields
+function prepareSubmit() {
+  // Synchronously populate all maturity dates and key calculations before submit
+  const cls = document.getElementById('asset-class')?.value;
+  const today = new Date().toISOString().split('T')[0];
+
+  if (cls === 'MONEY_MARKET') {
+    const td = document.getElementById('mm_trade_date')?.value;
+    const tn = parseInt(document.getElementById('mm_tenor')?.value || 0);
+    if (td && tn > 0) setV('mm_maturity_date', addDays(td, tn));
+    const face = parseFloat(document.getElementById('mm_face_value')?.value || 0);
+    if (face > 0) setV('mm_total_cost', face.toFixed(2)); // default cost = face
+    calcMM(); // fire async calc too (for accurate discount)
+  }
+  if (cls === 'GOVT_SECURITIES') {
+    const td = document.getElementById('gs_trade_date')?.value;
+    const tn = parseInt(document.getElementById('gs_tenor')?.value || 0);
+    if (td && tn > 0) setV('gs_maturity_date', addDays(td, tn));
+    // total_cost computed by server; just ensure face is set
+    calcGS(); // fire async calc
+  }
+  if (cls === 'BONDS') {
+    const td    = document.getElementById('bond_trade_date')?.value;
+    const tenor = parseFloat(document.getElementById('bond_tenor')?.value || 0);
+    if (td && tenor > 0) setV('bond_maturity_date', addYears(td, tenor));
+    calcBond(); // synchronous now
+  }
+  if (cls === 'EUROBONDS') {
+    const td    = document.getElementById('euro_trade_date')?.value;
+    const tenor = parseFloat(document.getElementById('euro_tenor')?.value || 0);
+    if (td && tenor > 0) setV('euro_maturity_date', addYears(td, tenor));
+    calcEuro(); // synchronous now
+  }
+  if (cls === 'PRIVATE_DEBT') {
+    const td    = document.getElementById('pd_trade_date')?.value;
+    const tenor = parseFloat(document.getElementById('pd_tenor')?.value || 0);
+    if (td && tenor > 0) setV('pd_maturity_date', addYears(td, tenor));
+    // Default outstanding = drawn if not set
+    const drawn = parseFloat(document.getElementById('pd_total_cost')?.value || 0);
+    const outEl = document.getElementById('pd_outstanding');
+    if (outEl && !outEl.value && drawn > 0) outEl.value = drawn.toFixed(2);
+    calcPD();
+  }
+  if (cls === 'GSE_EQUITIES')    calcGSE();
+  if (cls === 'GLOBAL_EQUITIES') calcGL();
+  if (cls === 'PRIVATE_EQUITY')  calcPE();
+  if (cls === 'MUTUAL_FUNDS')    calcMF();
+  return true;
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
   switchPanel();
+  updateCashBanner();
   {% if investment %}
-  // Re-trigger cash info
-  document.getElementById('account-select').dispatchEvent(new Event('change'));
+  // Re-trigger calculations on edit
+  const cls = document.getElementById('asset-class')?.value;
+  if (cls === 'MONEY_MARKET')    calcMM();
+  if (cls === 'GOVT_SECURITIES') calcGS();
+  if (cls === 'BONDS')           calcBond();
+  if (cls === 'EUROBONDS')       calcEuro();
+  if (cls === 'GSE_EQUITIES')    calcGSE();
+  if (cls === 'GLOBAL_EQUITIES') calcGL();
+  if (cls === 'PRIVATE_EQUITY')  calcPE();
+  if (cls === 'PRIVATE_DEBT')    calcPD();
+  if (cls === 'MUTUAL_FUNDS')    calcMF();
   {% endif %}
 });
 </script>

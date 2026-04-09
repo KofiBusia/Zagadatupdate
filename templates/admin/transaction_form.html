@@ -36,8 +36,13 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Transaction Date *</label>
-        <input type="date" name="txn_date" value="{{ '' }}" required>
+        <label>Transaction Date *
+          {% if not current_user.is_super_admin %}
+          <span style="font-size:9px;color:var(--grey);font-weight:400;letter-spacing:0;">(today only — Super Admin can backdate)</span>
+          {% endif %}
+        </label>
+        <input type="date" name="txn_date" id="txn-date" required
+               {% if not current_user.is_super_admin %}readonly style="opacity:.6;cursor:not-allowed;"{% endif %}>
       </div>
       <div class="form-group">
         <label>Currency</label>
@@ -77,6 +82,6 @@ async function showBalance() {
     `Cash Balance: ${d.currency} ${d.cash_balance.toLocaleString('en',{minimumFractionDigits:2})}`;
 }
 document.getElementById('txn-acc').addEventListener('change', showBalance);
-document.querySelector('[name=txn_date]').valueAsDate = new Date();
+document.getElementById('txn-date').valueAsDate = new Date();
 </script>
 {% endblock %}

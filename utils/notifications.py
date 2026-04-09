@@ -141,3 +141,183 @@ def audit(action, target=None, detail=None, actor=None):
         db.session.commit()
     except Exception as e:
         print(f"[AUDIT] Failed: {e}")
+
+def email_login_alert(account, ip_address=None, user_agent=None):
+    """
+    Send a real-time security alert email whenever a client signs in.
+    Informs the client of the login event with time, IP and browser info.
+    Advises them to contact support immediately if they did not initiate it.
+    """
+    if not account.email:
+        return
+    from datetime import timezone
+    now_utc = datetime.utcnow()
+    time_str = now_utc.strftime('%d %B %Y at %H:%M UTC')
+    ip_str   = ip_address or 'Unknown'
+    ua_str   = (user_agent or 'Unknown')[:80]
+
+    subject = f'[Zagadat Capital] Sign-In Alert — {account.account_number}'
+    body = f"""
+    <div style="font-family: 'DM Sans', Arial, sans-serif; max-width: 600px; margin: 0 auto;
+                background: #0A0A0A; color: #F5F5F0; padding: 40px; border-radius: 12px;">
+      <div style="text-align:center; margin-bottom: 24px;">
+        <h1 style="color:#C9A84C; font-size:26px; margin:0; letter-spacing:3px;">ZAGADAT CAPITAL</h1>
+        <p style="color:#8A8A9A; font-size:11px; letter-spacing:4px; text-transform:uppercase; margin-top:4px;">
+          Fund Management · Security Alert
+        </p>
+      </div>
+      <hr style="border:none; border-top:1px solid rgba(201,168,76,0.3); margin:0 0 28px 0;">
+
+      <h2 style="color:#C9A84C; font-size:18px; margin:0 0 8px 0;">
+        🔐 New Sign-In Detected
+      </h2>
+      <p style="color:#F5F5F0; margin:0 0 20px 0;">
+        Dear <strong>{account.full_name}</strong>,<br>
+        We detected a new sign-in to your Zagadat Capital account.
+      </p>
+
+      <div style="background:rgba(201,168,76,0.08); border:1px solid rgba(201,168,76,0.25);
+                  border-radius:8px; padding:20px; margin-bottom:24px;">
+        <table style="width:100%; border-collapse:collapse;">
+          <tr>
+            <td style="color:#8A8A9A; font-size:12px; padding:6px 0; width:40%;">Account Number</td>
+            <td style="color:#C9A84C; font-size:14px; font-weight:700;">{account.account_number}</td>
+          </tr>
+          <tr>
+            <td style="color:#8A8A9A; font-size:12px; padding:6px 0;">Sign-In Time</td>
+            <td style="color:#F5F5F0; font-size:13px;">{time_str}</td>
+          </tr>
+          <tr>
+            <td style="color:#8A8A9A; font-size:12px; padding:6px 0;">IP Address</td>
+            <td style="color:#F5F5F0; font-size:13px;">{ip_str}</td>
+          </tr>
+          <tr>
+            <td style="color:#8A8A9A; font-size:12px; padding:6px 0;">Browser / Device</td>
+            <td style="color:#F5F5F0; font-size:13px;">{ua_str}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="background:rgba(231,76,60,0.1); border:1px solid rgba(231,76,60,0.35);
+                  border-radius:8px; padding:16px 20px; margin-bottom:28px;">
+        <p style="color:#E74C3C; font-weight:700; margin:0 0 6px 0; font-size:13px;">
+          ⚠ Was this not you?
+        </p>
+        <p style="color:#F5F5F0; font-size:12px; line-height:1.7; margin:0;">
+          If you did not sign in, your account may be compromised.
+          Please contact us immediately at
+          <a href="mailto:security@zagadatcapital.com" style="color:#C9A84C;">
+            security@zagadatcapital.com
+          </a>
+          and change your access credentials.
+        </p>
+      </div>
+
+      <div style="background:rgba(39,174,96,0.08); border:1px solid rgba(39,174,96,0.25);
+                  border-radius:8px; padding:16px 20px; margin-bottom:28px;">
+        <p style="color:#27AE60; font-weight:700; font-size:12px; margin:0 0 6px 0;">
+          🛡 Security Reminder
+        </p>
+        <p style="color:#F5F5F0; font-size:12px; line-height:1.7; margin:0;">
+          Keep your <strong>Account Number ({account.account_number})</strong> strictly confidential.
+          Never share it with any third party, including individuals claiming to be Zagadat Capital staff.
+          Our team will <strong>never</strong> ask for your account credentials via phone, email or messaging.
+        </p>
+      </div>
+
+      <p style="color:#8A8A9A; font-size:11px; line-height:1.8; border-top:1px solid rgba(201,168,76,0.15);
+                padding-top:20px; margin:0;">
+        This is an automated security notification. Do not reply to this email.<br>
+        Zagadat Capital Fund Management · info@zagadatcapital.com<br>
+        Licensed by the Securities &amp; Exchange Commission, Ghana.
+      </p>
+    </div>
+    """
+    send_email(account.email, subject, body)
+
+def email_transaction_approved(account, txn):
+    """
+    Send real-time email alert to client when a transaction is approved.
+    Covers DEPOSIT, WITHDRAWAL, BUY, SELL, DIVIDEND, COUPON, FEE, TRANSFER.
+    """
+    if not account.email:
+        return
+    from datetime import timezone
+    now_str = datetime.utcnow().strftime('%d %B %Y at %H:%M UTC')
+    is_credit = txn.txn_type in ('DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL')
+    colour    = '#27AE60' if is_credit else '#E74C3C'
+    direction = 'CREDITED' if is_credit else 'DEBITED'
+    ghs_amt   = txn.amount_ghs if txn.amount_ghs is not None else txn.amount
+    orig_line = (f'<tr><td style="color:#8A8A9A;font-size:12px;padding:5px 0;width:44%;">Original Amount</td>'
+                 f'<td style="color:#F5F5F0;font-size:13px;">'
+                 f'{txn.currency} {txn.amount:,.2f}</td></tr>'
+                 if txn.currency != 'GHS' else '')
+    fx_line   = (f'<tr><td style="color:#8A8A9A;font-size:12px;padding:5px 0;">FX Rate Applied</td>'
+                 f'<td style="color:#F5F5F0;font-size:13px;">'
+                 f'1 {txn.currency} = GHS {txn.fx_rate_used:.4f}</td></tr>'
+                 if txn.currency != 'GHS' and txn.fx_rate_used else '')
+
+    subject = f'[Zagadat Capital] Transaction {direction} — {txn.txn_type} {txn.currency} {txn.amount:,.2f}'
+    body = f"""
+    <div style="font-family:'DM Sans',Arial,sans-serif;max-width:600px;margin:0 auto;
+                background:#0A0A0A;color:#F5F5F0;padding:40px;border-radius:12px;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <h1 style="color:#C9A84C;font-size:24px;margin:0;letter-spacing:3px;">ZAGADAT CAPITAL</h1>
+        <p style="color:#8A8A9A;font-size:11px;letter-spacing:4px;text-transform:uppercase;margin-top:4px;">
+          Fund Management · Transaction Alert
+        </p>
+      </div>
+      <hr style="border:none;border-top:1px solid rgba(201,168,76,0.3);margin:0 0 24px;">
+
+      <h2 style="font-size:17px;margin:0 0 8px;color:{colour};">
+        {'✅' if is_credit else '💸'} Transaction {direction}
+      </h2>
+      <p style="color:#F5F5F0;margin:0 0 20px;">
+        Dear <strong>{account.full_name}</strong>,<br>
+        The following transaction has been approved on your account.
+      </p>
+
+      <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.25);
+                  border-radius:8px;padding:18px;margin-bottom:20px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td style="color:#8A8A9A;font-size:12px;padding:5px 0;width:44%;">Account Number</td>
+              <td style="color:#C9A84C;font-size:14px;font-weight:700;">{account.account_number}</td></tr>
+          <tr><td style="color:#8A8A9A;font-size:12px;padding:5px 0;">Transaction Type</td>
+              <td style="color:#F5F5F0;font-size:13px;">{txn.txn_type.replace('_',' ')}</td></tr>
+          {orig_line}
+          <tr><td style="color:#8A8A9A;font-size:12px;padding:5px 0;">GHS Amount</td>
+              <td style="color:{colour};font-size:16px;font-weight:700;">GHS {ghs_amt:,.2f}</td></tr>
+          {fx_line}
+          <tr><td style="color:#8A8A9A;font-size:12px;padding:5px 0;">Transaction Date</td>
+              <td style="color:#F5F5F0;font-size:13px;">{txn.txn_date.strftime('%d %B %Y') if txn.txn_date else now_str}</td></tr>
+          <tr><td style="color:#8A8A9A;font-size:12px;padding:5px 0;">Description</td>
+              <td style="color:#F5F5F0;font-size:13px;">{txn.description or '—'}</td></tr>
+          <tr><td style="color:#8A8A9A;font-size:12px;padding:5px 0;">Reference</td>
+              <td style="color:#F5F5F0;font-size:13px;">{txn.reference or '—'}</td></tr>
+          <tr><td style="color:#8A8A9A;font-size:12px;padding:5px 0;">Approved At</td>
+              <td style="color:#F5F5F0;font-size:13px;">{now_str}</td></tr>
+        </table>
+      </div>
+
+      <div style="background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.25);
+                  border-radius:8px;padding:14px 18px;margin-bottom:24px;">
+        <p style="color:#27AE60;font-weight:700;font-size:12px;margin:0 0 5px;">
+          🛡 Security Reminder
+        </p>
+        <p style="color:#F5F5F0;font-size:12px;line-height:1.7;margin:0;">
+          If you did not authorise this transaction, contact us immediately at
+          <a href="mailto:security@zagadatcapital.com" style="color:#C9A84C;">
+          security@zagadatcapital.com</a>.
+          Keep your account number <strong>{account.account_number}</strong> strictly confidential.
+        </p>
+      </div>
+
+      <p style="color:#8A8A9A;font-size:11px;line-height:1.8;
+                border-top:1px solid rgba(201,168,76,0.15);padding-top:18px;margin:0;">
+        This is an automated notification. Do not reply to this email.<br>
+        Zagadat Capital Fund Management · info@zagadatcapital.com<br>
+        Licensed by the Securities &amp; Exchange Commission, Ghana.
+      </p>
+    </div>
+    """
+    send_email(account.email, subject, body)

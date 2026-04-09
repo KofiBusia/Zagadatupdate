@@ -1,4 +1,4 @@
-﻿from extensions import db, login_manager, bcrypt
+from extensions import db, login_manager, bcrypt
 from flask_login import UserMixin
 from datetime import datetime, date
 
@@ -558,15 +558,16 @@ class StockPrice(db.Model):
 
 class MigrationLog(db.Model):
     __tablename__ = 'migration_logs'
-    id = db.Column(db.Integer, primary_key=True)
-    filename = db.Column(db.String(200), nullable=True)
-    records_in = db.Column(db.Integer, default=0)
-    records_ok = db.Column(db.Integer, default=0)
-    records_err = db.Column(db.Integer, default=0)
-    errors = db.Column(db.Text, nullable=True)
-    executed_by = db.Column(db.Integer, nullable=True)
-    executed_at = db.Column(db.DateTime, default=datetime.utcnow)
-    status = db.Column(db.String(20), default='COMPLETED')
+    id            = db.Column(db.Integer, primary_key=True)
+    source_system = db.Column(db.String(80), nullable=True, default='Data Migration')
+    filename      = db.Column(db.String(200), nullable=True)
+    records_in    = db.Column(db.Integer, default=0)
+    records_ok    = db.Column(db.Integer, default=0)
+    records_err   = db.Column(db.Integer, default=0)
+    errors        = db.Column(db.Text, nullable=True)
+    executed_by   = db.Column(db.Integer, nullable=True)
+    executed_at   = db.Column(db.DateTime, default=datetime.utcnow)
+    status        = db.Column(db.String(20), default='COMPLETED')
 
 class EmailLog(db.Model):
     __tablename__ = 'email_logs'

@@ -94,7 +94,9 @@ def profile():
         flash('Profile updated successfully.', 'success')
         return redirect(url_for('user.profile'))
 
-    return render_template('user/profile.html', acc=acc)
+    from models import ClientUser
+    cu = ClientUser.query.filter_by(account_number=current_user.account_number).first()
+    return render_template('user/profile.html', acc=acc, cu=cu)
 
 @user_bp.route('/statement')
 @client_required
@@ -124,11 +126,26 @@ def requests_page():
                 flash(f'Insufficient cash balance. Available: GHS {acc.cash_balance:,.2f}', 'error')
                 return redirect(request.url)
 
+        currency = request.form.get('currency', 'GHS')
+        from utils.market_data import get_fx_rate
+        fx_rate  = get_fx_rate(currency, 'GHS') if currency != 'GHS' else 1.0
+        ghs_equiv = round(amount_f * fx_rate, 2) if amount_f else None
+
+        # Additional check: withdrawal must not exceed available balance
+        if req_type == 'WITHDRAWAL' and amount_f and ghs_equiv:
+            if acc.cash_balance < ghs_equiv:
+                flash(
+                    f'Insufficient balance. Available: GHS {acc.cash_balance:,.2f} | '
+                    f'Requested: {currency} {amount_f:,.2f} ≈ GHS {ghs_equiv:,.2f}',
+                    'error'
+                )
+                return redirect(request.url)
+
         cr = ClientRequest(
             account_number=acc.account_number,
             request_type=req_type,
             amount=amount_f,
-            currency=request.form.get('currency', 'GHS'),
+            currency=currency,
             asset_class=request.form.get('asset_class'),
             description=desc,
             status='PENDING'

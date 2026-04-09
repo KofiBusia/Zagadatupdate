@@ -67,6 +67,8 @@ def seed_defaults():
                        email='admin@zagadatcapital.com', role='SUPER_ADMIN', is_rm=True,
                        rm_commission_rate=1.0)
         sa.set_password('ZagadatAdmin@2026')
+        # ⚠ IMPORTANT: Change this default password immediately after first login!
+        # Go to Admin → My Profile → Change Password
         db.session.add(sa)
         db.session.flush()
 

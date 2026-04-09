@@ -3,67 +3,119 @@
 {% block content %}
 <div class="page-content">
   <div class="page-header">
-    <div><h1>Client Requests</h1><p>Withdrawal, investment, and top-up requests from clients</p></div>
+    <div>
+      <h1>Client Requests</h1>
+      <p>Deposits, withdrawals, and investment requests submitted by clients</p>
+    </div>
   </div>
 
-  <!-- FILTER -->
-  <form method="GET" style="display:flex;gap:10px;margin-bottom:1.5rem;">
+  {# ── Workflow note ── #}
+  <div style="background:rgba(52,152,219,0.08);border:1px solid rgba(52,152,219,0.25);border-radius:8px;
+              padding:12px 16px;margin-bottom:1.2rem;font-size:12px;color:var(--grey);line-height:1.8;">
+    <strong style="color:#3498DB;">Approval Workflow:</strong>
+    Approving a <strong>Deposit/Top-Up</strong> automatically creates an approved transaction and updates the client's cash balance.
+    Approving a <strong>Withdrawal</strong> checks available cash, then creates an approved withdrawal transaction.
+    Approving an <strong>Investment request</strong> authorises the admin to enter the investment — cash must be available.
+  </div>
+
+  {# ── Filter ── #}
+  <form method="GET" style="display:flex;gap:8px;margin-bottom:1.2rem;flex-wrap:wrap;">
     <select name="status" style="background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;outline:none;">
       <option value="">All Statuses</option>
-      <option value="PENDING" {{ 'selected' if status=='PENDING' }}>Pending</option>
-      <option value="APPROVED" {{ 'selected' if status=='APPROVED' }}>Approved</option>
-      <option value="REJECTED" {{ 'selected' if status=='REJECTED' }}>Rejected</option>
+      <option value="PENDING"  {{ 'selected' if status=='PENDING' }}>⏳ Pending</option>
+      <option value="APPROVED" {{ 'selected' if status=='APPROVED' }}>✓ Approved</option>
+      <option value="REJECTED" {{ 'selected' if status=='REJECTED' }}>✕ Rejected</option>
     </select>
-    <button type="submit" class="btn btn-secondary">Filter</button>
-    <a href="{{ url_for('admin.client_requests') }}" class="btn btn-secondary">Clear</a>
+    <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+    <a href="{{ url_for('admin.client_requests') }}" class="btn btn-secondary btn-sm">Clear</a>
   </form>
 
   <div class="table-wrap">
     <table class="data-table">
       <thead>
         <tr>
-          <th>Date</th><th>Account</th><th>Client</th><th>Type</th>
-          <th class="text-right">Amount</th><th>Description</th>
-          <th>Status</th><th>Actions</th>
+          <th>Date</th>
+          <th>Account</th>
+          <th>Client</th>
+          <th>Type</th>
+          <th class="text-right">Amount (orig.)</th>
+          <th class="text-right">GHS Equiv.</th>
+          <th>Description</th>
+          <th>Status</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for r in requests %}
-        <tr>
+        <tr style="{{ 'background:rgba(201,168,76,0.04);' if r.status=='PENDING' else 'opacity:.65;' if r.status=='REJECTED' else '' }}">
           <td class="mono">{{ r.created_at.strftime('%d %b %Y') }}</td>
-          <td class="mono text-gold">
+          <td class="mono">
             {% if r.client_account %}
             <a href="{{ url_for('admin.view_account', acc_id=r.client_account.id) }}"
                style="color:var(--gold);text-decoration:none;">{{ r.account_number }}</a>
             {% else %}{{ r.account_number }}{% endif %}
           </td>
-          <td>{{ r.client_account.full_name if r.client_account else '—' }}</td>
-          <td><span class="badge badge-pending">{{ r.request_type }}</span></td>
-          <td class="num">{% if r.amount %}{{ r.currency }} {{ "{:,.2f}".format(r.amount) }}{% else %}—{% endif %}</td>
-          <td style="color:var(--grey);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ r.description or '—' }}</td>
+          <td style="font-size:12px;">{{ r.client_account.full_name if r.client_account else '—' }}</td>
+          <td>
+            <span class="badge badge-{{ 'approved' if r.request_type in ['DEPOSIT','TOPUP'] else 'pending' }}">
+              {{ r.request_type }}
+            </span>
+          </td>
+          <td class="num">
+            {% if r.amount %}
+            {% if r.currency != 'GHS' %}<span style="color:var(--grey);font-size:10px;">{{ r.currency }}</span> {% endif %}
+            {{ "{:,.2f}".format(r.amount) }}
+            {% else %}—{% endif %}
+          </td>
+          <td class="num" style="color:var(--gold);">
+            {% if r.amount and r.currency %}
+            {# Compute GHS equivalent for display only #}
+            {% if r.currency == 'GHS' %}
+            GHS {{ "{:,.2f}".format(r.amount) }}
+            {% else %}
+            <span style="font-size:10px;color:var(--grey);">≈</span> GHS
+            <span style="font-size:11px;color:var(--grey);">(at approval rate)</span>
+            {% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td style="color:var(--grey);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            {{ r.description or '—' }}
+          </td>
           <td>
             <span class="badge badge-{{ 'approved' if r.status=='APPROVED' else 'rejected' if r.status=='REJECTED' else 'pending' }}">
               {{ r.status }}
             </span>
           </td>
           <td>
-            {% if r.status == 'PENDING' %}
+            {% if r.status == 'PENDING' and current_user.has_permission('approve_investment') %}
             <form method="POST" action="{{ url_for('admin.action_request', req_id=r.id) }}"
                   style="display:inline;" id="form-{{ r.id }}">
               <input type="hidden" name="note" id="note-{{ r.id }}" value="">
-              <button type="submit" name="action" value="APPROVED" class="btn btn-success btn-sm">✓ Approve</button>
+              <button type="submit" name="action" value="APPROVED"
+                      class="btn btn-success btn-sm">✓ Approve</button>
               <button type="button" class="btn btn-danger btn-sm"
-                onclick="const n=prompt('Rejection reason:');if(n!==null){document.getElementById('note-{{ r.id }}').value=n;const f=document.getElementById('form-{{ r.id }}');const b=document.createElement('input');b.type='hidden';b.name='action';b.value='REJECTED';f.appendChild(b);f.submit();}">
+                      onclick="const n=prompt('Rejection reason:');
+                               if(n!==null){
+                                 document.getElementById('note-{{ r.id }}').value=n;
+                                 const f=document.getElementById('form-{{ r.id }}');
+                                 const b=document.createElement('input');
+                                 b.type='hidden'; b.name='action'; b.value='REJECTED';
+                                 f.appendChild(b); f.submit();
+                               }">
                 ✕ Reject
               </button>
             </form>
             {% else %}
-            <span style="font-size:11px;color:var(--grey);">{{ r.admin_note or 'Processed' }}</span>
+            <span style="font-size:11px;color:var(--grey);">
+              {{ r.admin_note or ('Processed ' + r.reviewed_at.strftime('%d %b %Y') if r.reviewed_at else 'Processed') }}
+            </span>
             {% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" style="text-align:center;color:var(--grey);padding:3rem;">No requests found.</td></tr>
+        <tr>
+          <td colspan="9" style="text-align:center;color:var(--grey);padding:3rem;">No requests found.</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>

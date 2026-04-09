@@ -1,76 +1,343 @@
 {% extends 'base.html' %}
 {% block title %}Data Migration — Zagadat Capital{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Migration tabs ── */
+.mig-tabs { display:flex; gap:0; border-bottom:1px solid var(--border); margin-bottom:1.5rem; overflow-x:auto; }
+.mig-tab  { padding:10px 20px; font-size:12px; font-weight:500; color:var(--grey); cursor:pointer;
+            border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap;
+            transition:color .2s,border-color .2s; background:none; border-top:none; border-left:none; border-right:none; outline:none; }
+.mig-tab:hover  { color:var(--white); }
+.mig-tab.active { color:var(--gold); border-bottom-color:var(--gold); }
+.mig-pane       { display:none; }
+.mig-pane.active{ display:block; }
+
+/* ── Template cards ── */
+.tmpl-section-hdr {
+  font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase;
+  color:var(--grey); margin:1.5rem 0 .75rem; padding-bottom:.4rem;
+  border-bottom:1px solid rgba(201,168,76,.15); display:flex; align-items:center; gap:.4rem;
+}
+.tmpl-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:.75rem; margin-bottom:.5rem; }
+.tmpl-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:1rem; display:flex; flex-direction:column; gap:.35rem; transition:.2s;
+}
+.tmpl-card:hover { border-color:var(--gold); box-shadow:0 4px 20px rgba(201,168,76,.12); }
+.tmpl-card.featured { border-color:rgba(201,168,76,.5); background:rgba(201,168,76,.04); }
+.tmpl-icon  { font-size:1.4rem; }
+.tmpl-title { font-size:.82rem; font-weight:700; color:var(--white); }
+.tmpl-sub   { font-size:.7rem; color:var(--grey); line-height:1.5; flex:1; }
+
+/* ── Mode toggle ── */
+.mode-row { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-bottom:1rem; }
+.mode-opt {
+  border:1.5px solid var(--border); border-radius:var(--radius); padding:.85rem 1rem;
+  cursor:pointer; transition:.2s; background:var(--surface);
+}
+.mode-opt:hover { border-color:rgba(201,168,76,.4); }
+.mode-opt.selected { border-color:var(--gold); background:rgba(201,168,76,.06); }
+.mode-opt input[type=radio] { display:none; }
+.mode-title { font-size:.82rem; font-weight:700; color:var(--white); margin-bottom:.2rem; display:flex; align-items:center; gap:.5rem; }
+.mode-title::before { content:'○'; font-size:1rem; color:var(--grey); transition:.2s; }
+.mode-opt.selected .mode-title::before { content:'●'; color:var(--gold); }
+.mode-sub  { font-size:.7rem; color:var(--grey); line-height:1.5; }
+.yr-chips  { display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.4rem; }
+.yr-chip   { font-size:.67rem; font-weight:600; background:rgba(201,168,76,.1); color:var(--gold);
+             border:1px solid rgba(201,168,76,.25); border-radius:10px; padding:.12rem .45rem; }
+
+/* ── Notice ── */
+.mig-note { background:rgba(201,168,76,.05); border:1px solid rgba(201,168,76,.2); border-radius:var(--radius);
+            padding:.75rem 1rem; font-size:.75rem; color:var(--grey); line-height:1.7; margin-bottom:.9rem; }
+.mig-note strong { color:var(--gold); }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-content">
   <div class="page-header">
-    <div><h1>Data Migration</h1><p>Super Admin only — import legacy data</p></div>
-  </div>
-
-  <div class="grid grid-2 mb-2">
-    <div class="card">
-      <div class="card-title" style="margin-bottom:1rem;">Upload Migration File</div>
-      <form method="POST" enctype="multipart/form-data">
-        <div class="form-group mb-2">
-          <label>Migration Type</label>
-          <select name="migrate_type">
-            <option value="accounts">Client Accounts</option>
-            <option value="transactions">Transactions</option>
-          </select>
-        </div>
-        <div class="form-group mb-2">
-          <label>CSV File</label>
-          <input type="file" name="file" accept=".csv" required style="background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--white);padding:8px;font-size:13px;">
-        </div>
-        <div class="flex gap-1">
-          <button type="submit" class="btn btn-primary">Upload & Migrate</button>
-        </div>
-      </form>
-    </div>
-    <div class="card">
-      <div class="card-title" style="margin-bottom:1rem;">Download Templates</div>
-      <p style="font-size:12px;color:var(--grey);margin-bottom:1rem;">Download CSV templates to prepare your data for migration.</p>
-      <div class="flex gap-1" style="flex-direction:column;">
-        <a href="{{ url_for('admin.migration_template', template_type='accounts') }}" class="btn btn-secondary">↓ Accounts Template (CSV)</a>
-        <a href="{{ url_for('admin.migration_template', template_type='transactions') }}" class="btn btn-secondary">↓ Transactions Template (CSV)</a>
-      </div>
-      <div style="margin-top:1rem;padding:1rem;background:rgba(201,168,76,0.05);border:1px solid var(--border);border-radius:6px;">
-        <p style="font-size:11px;color:var(--grey);line-height:1.8;">
-          <strong style="color:var(--gold);">Accounts CSV columns:</strong><br>
-          account_number, full_name, phone, email, account_type, country
-        </p>
-        <p style="font-size:11px;color:var(--grey);line-height:1.8;margin-top:8px;">
-          <strong style="color:var(--gold);">Transactions CSV columns:</strong><br>
-          account_number, txn_date (YYYY-MM-DD), txn_type, description, amount, currency, reference
-        </p>
-      </div>
+    <div>
+      <h1>Data Migration Centre</h1>
+      <p>Super Admin only — download templates, upload data, track migration history</p>
     </div>
   </div>
 
-  <!-- MIGRATION HISTORY -->
-  <div class="card">
-    <div class="card-title" style="margin-bottom:1rem;">Migration History</div>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr><th>Date</th><th>File</th><th>Records In</th><th>Successful</th><th>Errors</th><th>Status</th><th>Executed By</th></tr>
-        </thead>
-        <tbody>
-          {% for log in logs %}
-          <tr>
-            <td class="mono">{{ log.executed_at.strftime('%d %b %Y %H:%M') }}</td>
-            <td>{{ log.filename or '—' }}</td>
-            <td class="num">{{ log.records_in }}</td>
-            <td class="num text-green">{{ log.records_ok }}</td>
-            <td class="num text-red">{{ log.records_err }}</td>
-            <td><span class="badge badge-{{ 'approved' if log.status=='COMPLETED' else 'pending' }}">{{ log.status }}</span></td>
-            <td class="mono">ID:{{ log.executed_by }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="7" style="text-align:center;color:var(--grey);padding:2rem;">No migrations yet.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  <!-- ── TABS ─────────────────────────────────────────────────────────────── -->
+  <div class="mig-tabs">
+    <button class="mig-tab active" onclick="migTab('templates')"   id="mt-templates">&#11015; Download Templates</button>
+    <button class="mig-tab"        onclick="migTab('upload')"      id="mt-upload">&#11014; Upload &amp; Import</button>
+    <button class="mig-tab"        onclick="migTab('history')"     id="mt-history">&#128202; Migration History</button>
   </div>
-</div>
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       PANE 1 — DOWNLOAD TEMPLATES
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div class="mig-pane active" id="mp-templates">
+
+    <div class="mig-note">
+      <strong>How migration works:</strong> Download the Excel template(s) that match your client data.
+      Each workbook contains multiple sheets covering every field required by this system.
+      Fill in the data, then upload using the <strong>Upload &amp; Import</strong> tab.
+      All fields map directly to the database — no reformatting needed.
+    </div>
+
+    <!-- ── A. CLIENT ACCOUNTS (KYC) ─────────────────────────────────────── -->
+    <div class="tmpl-section-hdr">&#128100; Client Accounts — KYC Templates</div>
+    <div class="tmpl-grid">
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128100;</div>
+        <div class="tmpl-title">Individual</div>
+        <div class="tmpl-sub">Personal details · ID &amp; TIN · Employment · Banking · Risk profile · Beneficiaries · PEP / FATCA</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='account', subtype='individual') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128376;</div>
+        <div class="tmpl-title">Individual ITF</div>
+        <div class="tmpl-sub">Trustee KYC + beneficiary details (ITF name, DOB, ID, relationship, release conditions)</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='account', subtype='individual_itf') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128145;</div>
+        <div class="tmpl-title">Joint Account</div>
+        <div class="tmpl-sub">Primary + secondary holder KYC · Mandate type (Either/Or, Both to Sign) · Survival clause</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='account', subtype='joint') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#127970;</div>
+        <div class="tmpl-title">Corporate / Company</div>
+        <div class="tmpl-sub">Entity details · Cert of Incorporation · Directors &amp; beneficial owners ≥10% · Authorized signatories</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='account', subtype='corporate') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#127979;</div>
+        <div class="tmpl-title">Pension Fund / Trust</div>
+        <div class="tmpl-sub">NPRA registration · Trustees · Fund administrator &amp; custodian · Beneficiary class · IPS reference</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='account', subtype='pension') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#127968;</div>
+        <div class="tmpl-title">NGO / Association</div>
+        <div class="tmpl-sub">Registration body · Executive committee · Mandate &amp; signing authority · Source of funds</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='account', subtype='ngo') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+    </div>
+
+    <!-- ── B. INVESTMENT PORTFOLIOS ──────────────────────────────────────── -->
+    <div class="tmpl-section-hdr">&#128202; Investment Portfolios — by Asset Class</div>
+
+    <div class="tmpl-grid">
+      <div class="tmpl-card featured">
+        <div class="tmpl-icon">&#11088;</div>
+        <div class="tmpl-title" style="color:var(--gold)">Full Portfolio Master</div>
+        <div class="tmpl-sub">All asset classes in one workbook (8 sheets): Summary + Govt Securities + Bonds + Eurobonds + GSE Equities + Global Equities + Money Market + Private Equity + Private Debt + Mutual Funds</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='full') }}"
+           class="btn btn-primary btn-sm" style="margin-top:auto">Download Master</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#127988;</div>
+        <div class="tmpl-title">Govt Securities</div>
+        <div class="tmpl-sub">T-Bills, Govt bonds · Face value, interest rate, tenor, trade &amp; maturity dates, HTM/MTM value</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='GOVT_SECURITIES') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128196;</div>
+        <div class="tmpl-title">Bonds (Corporate)</div>
+        <div class="tmpl-sub">Corporate bonds, notes · ISIN, coupon rate &amp; frequency, clean price, accrued interest, rating, custodian</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='BONDS') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#127758;</div>
+        <div class="tmpl-title">Eurobonds</div>
+        <div class="tmpl-sub">USD/EUR denominated bonds · Currency, ISIN, coupon, clean price, country of issue, rating</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='EUROBONDS') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128202;</div>
+        <div class="tmpl-title">GSE Equities</div>
+        <div class="tmpl-sub">Ghana Stock Exchange shares · Ticker, sector, quantity, unit cost, current price, market value, CSD number</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='GSE_EQUITIES') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#127757;</div>
+        <div class="tmpl-title">Global Equities</div>
+        <div class="tmpl-sub">NYSE / LSE / other exchange stocks · Ticker, exchange, currency, quantity, unit cost, current price</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='GLOBAL_EQUITIES') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128176;</div>
+        <div class="tmpl-title">Money Market</div>
+        <div class="tmpl-sub">Call deposits, commercial paper, fixed deposits · Principal, rate, tenor (days), start &amp; maturity dates</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='MONEY_MARKET') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128181;</div>
+        <div class="tmpl-title">Mutual Funds / CIS</div>
+        <div class="tmpl-sub">Units held, NAV, fund manager, distribution option, folio number, cost basis</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='MUTUAL_FUNDS') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128183;</div>
+        <div class="tmpl-title">Private Equity</div>
+        <div class="tmpl-sub">Vintage year, geography, stage · Committed, called, distributions, MOIC, IRR, NAV</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='PRIVATE_EQUITY') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128179;</div>
+        <div class="tmpl-title">Private Debt</div>
+        <div class="tmpl-sub">Outstanding balance, PIK flag, coupon rate, issuer, maturity, rating</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='portfolio', subtype='PRIVATE_DEBT') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+
+    </div>
+
+    <!-- ── C. TRANSACTIONS ──────────────────────────────────────────────── -->
+    <div class="tmpl-section-hdr">&#128260; Transaction History</div>
+    <div class="tmpl-grid">
+      <div class="tmpl-card">
+        <div class="tmpl-icon">&#128260;</div>
+        <div class="tmpl-title">Transaction History</div>
+        <div class="tmpl-sub">Account number · Date · Type (DEPOSIT, WITHDRAW, BUY, SELL, DIVIDEND, COUPON…) · Amount · Reference</div>
+        <a href="{{ url_for('admin.migration_excel_template', category='transactions', subtype='all') }}"
+           class="btn btn-secondary btn-sm" style="margin-top:auto">Download Excel</a>
+      </div>
+    </div>
+
+    <div class="mig-note" style="margin-top:1rem">
+      <strong>Tip:</strong> Each template sheet column header is the exact database field name.
+      After filling in your data, upload via the <strong>Upload &amp; Import</strong> tab.
+      CSV format is also supported — use the same column names.
+    </div>
+
+  </div><!-- /mp-templates -->
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       PANE 2 — UPLOAD & IMPORT
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div class="mig-pane" id="mp-upload">
+    <div class="grid grid-2 mb-2">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:1rem">Upload Migration File</div>
+        <form method="POST" enctype="multipart/form-data">
+          <div class="form-group mb-2">
+            <label>Migration Type</label>
+            <select name="migrate_type">
+              <option value="accounts">Client Accounts (Individual / ITF / Joint / Corporate / Pension / NGO)</option>
+              <option value="investments">Investment Portfolio</option>
+              <option value="transactions">Transactions</option>
+            </select>
+          </div>
+          <div class="form-group mb-2">
+            <label>CSV File <span style="color:var(--grey);font-size:11px">(exported from Excel — Save As CSV)</span></label>
+            <input type="file" name="file" accept=".csv,.xlsx" required
+              style="background:var(--surface);border:1px solid var(--border);border-radius:5px;color:var(--white);padding:8px;font-size:13px;">
+          </div>
+          <div class="flex gap-1">
+            <button type="submit" class="btn btn-primary">&#11014; Upload &amp; Migrate</button>
+          </div>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:.75rem">Field Reference</div>
+        <div style="font-size:11px;color:var(--grey);line-height:1.9">
+          <strong style="color:var(--gold)">Accounts key fields:</strong><br>
+          account_number · full_name · phone · email · account_type<br>
+          (Individual / Individual ITF / Joint / Corporate / Pension Fund / NGO)<br><br>
+          <strong style="color:var(--gold)">Investments key fields:</strong><br>
+          account_number · asset_class · security_name · issuer · trade_date<br>
+          maturity_date · face_value · coupon_rate · total_cost · currency<br><br>
+          <strong style="color:var(--gold)">Transactions key fields:</strong><br>
+          account_number · txn_date (YYYY-MM-DD) · txn_type · amount · currency<br>
+          (txn_type: DEPOSIT / WITHDRAWAL / BUY / SELL / DIVIDEND / COUPON / FEE)<br><br>
+          <strong style="color:var(--gold)">Asset class codes:</strong><br>
+          GOVT_SECURITIES · BONDS · EUROBONDS · GSE_EQUITIES · GLOBAL_EQUITIES<br>
+          MONEY_MARKET · MUTUAL_FUNDS · PRIVATE_EQUITY · PRIVATE_DEBT
+        </div>
+      </div>
+    </div>
+  </div><!-- /mp-upload -->
+
+  <!-- ════════════════════════════════════════════════════════════════════
+       PANE 3 — HISTORY
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div class="mig-pane" id="mp-history">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:1rem">Migration History</div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Date / Time</th><th>File</th><th>Records In</th>
+              <th>Successful</th><th>Errors</th><th>Status</th><th>By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in logs %}
+            <tr>
+              <td class="mono">{{ log.executed_at.strftime('%d %b %Y %H:%M') }}</td>
+              <td>{{ log.filename or '—' }}</td>
+              <td class="num">{{ log.records_in }}</td>
+              <td class="num text-green">{{ log.records_ok }}</td>
+              <td class="num text-red">{{ log.records_err }}</td>
+              <td><span class="badge badge-{{ 'approved' if log.status=='COMPLETED' else 'pending' }}">{{ log.status }}</span></td>
+              <td class="mono">ID:{{ log.executed_by }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" style="text-align:center;color:var(--grey);padding:2rem">No migrations yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /mp-history -->
+
+</div><!-- /page-content -->
+
+<script>
+function migTab(tab) {
+  ['templates','upload','history'].forEach(t => {
+    document.getElementById('mp-'+t).classList.remove('active');
+    document.getElementById('mt-'+t).classList.remove('active');
+  });
+  document.getElementById('mp-'+tab).classList.add('active');
+  document.getElementById('mt-'+tab).classList.add('active');
+}
+// Open upload tab if there's a flash message (post-migration redirect)
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    document.addEventListener('DOMContentLoaded', () => migTab('history'));
+  {% endif %}
+{% endwith %}
+</script>
 {% endblock %}

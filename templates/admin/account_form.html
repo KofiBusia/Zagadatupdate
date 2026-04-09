@@ -2,11 +2,37 @@
 {% block title %}{{ 'Edit' if account else 'New' }} Account — Zagadat Capital{% endblock %}
 {% block extra_css %}
 <style>
-.section-tabs { display:flex; gap:0; margin-bottom:1.5rem; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
-.stab { flex:1; padding:8px 12px; background:transparent; border:none; color:var(--grey); font-size:11px; font-family:var(--font-body); cursor:pointer; letter-spacing:1px; text-transform:uppercase; transition:all 0.2s; }
-.stab.active { background:var(--gold); color:var(--black); font-weight:600; }
-.tab-panel { display:none; }
-.tab-panel.active { display:block; }
+/* ── Wizard progress bar ── */
+.wizard-bar{display:flex;margin-bottom:1.5rem;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.wstep{flex:1;padding:10px 8px;background:transparent;border:none;color:var(--grey);
+       font-size:10px;font-family:var(--font-body);cursor:pointer;letter-spacing:.8px;
+       text-transform:uppercase;transition:all .2s;text-align:center;border-right:1px solid var(--border);
+       display:flex;flex-direction:column;align-items:center;gap:3px;position:relative;}
+.wstep:last-child{border-right:none;}
+.wstep .wnum{width:22px;height:22px;border-radius:50%;border:1px solid var(--border);
+             display:flex;align-items:center;justify-content:center;font-size:11px;
+             font-weight:700;color:var(--grey);transition:all .3s;}
+.wstep.active{background:rgba(201,168,76,.08);color:var(--gold);}
+.wstep.active .wnum{border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,.15);}
+.wstep.done{color:var(--green);}
+.wstep.done .wnum{border-color:var(--green);color:var(--black);background:var(--green);}
+.wstep.done .wnum::after{content:'✓';}
+.wstep.done .wlabel{display:none;}
+.wstep.done .wnum{font-size:0;}
+/* ── Panels ── */
+.wpanel{display:none;} .wpanel.active{display:block;}
+/* ── Validation feedback ── */
+.field-err{border-color:var(--red)!important;}
+.field-ok{border-color:var(--green)!important;}
+.val-msg{font-size:10px;margin-top:2px;}
+.val-err{color:var(--red);} .val-ok{color:var(--green);}
+/* ── Navigation buttons ── */
+.wizard-nav{display:flex;justify-content:space-between;align-items:center;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border);}
+.btn-prev{background:transparent;border:1px solid var(--border);color:var(--grey);border-radius:6px;padding:10px 20px;font-size:13px;cursor:pointer;font-family:var(--font-body);transition:all .2s;}
+.btn-prev:hover{border-color:var(--gold);color:var(--gold);}
+.btn-next{background:var(--gold);color:var(--black);border:none;border-radius:6px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font-body);letter-spacing:.5px;transition:all .2s;}
+.btn-next:hover{background:var(--gold2);transform:translateY(-1px);}
+.step-counter{font-size:11px;color:var(--grey);}
 </style>
 {% endblock %}
 {% block content %}
@@ -14,47 +40,84 @@
   <div class="page-header">
     <div>
       <h1>{{ 'Edit Account' if account else 'New Client Account' }}</h1>
-      <p>{{ account.account_number if account else 'Complete all sections' }}</p>
+      <p>{{ account.account_number if account else 'Complete all steps — fields marked * are required' }}</p>
     </div>
     <a href="{{ url_for('admin.accounts') }}" class="btn btn-secondary">← Back</a>
   </div>
 
-  <div class="section-tabs">
-    <button class="stab active" onclick="showTab('personal',this)">Personal</button>
-    <button class="stab" onclick="showTab('contact',this)">Contact</button>
-    <button class="stab" onclick="showTab('employment',this)">Employment</button>
-    <button class="stab" onclick="showTab('financial',this)">Financial</button>
-    <button class="stab" onclick="showTab('account',this)">Account</button>
-    <button class="stab" onclick="showTab('beneficiary',this)">Beneficiary</button>
-    <button class="stab" onclick="showTab('aml',this)">AML / PEP</button>
-    <button class="stab" onclick="showTab('itf',this)">ITF / Joint</button>
-    <button class="stab" onclick="showTab('fatca',this)">FATCA / CRS</button>
+  <!-- ── Wizard step bar ── -->
+  {% if not account %}
+  <div class="wizard-bar" id="wizard-bar">
+    {% set steps = [
+      ('Personal & ID', '1'),
+      ('Contact & Bank', '2'),
+      ('Employment', '3'),
+      ('Financial', '4'),
+      ('Account Settings', '5'),
+      ('Beneficiary & KIN', '6'),
+      ('AML / Compliance', '7'),
+    ] %}
+    {% for label, num in steps %}
+    <button class="wstep {{ 'active' if loop.first }}" id="ws{{ num }}"
+            type="button" onclick="jumpStep({{ num }})" title="{{ label }}">
+      <span class="wnum">{{ num }}</span>
+      <span class="wlabel" style="font-size:9px;">{{ label }}</span>
+    </button>
+    {% endfor %}
   </div>
+  {% endif %}
 
-  <form method="POST">
+  <form method="POST" id="account-form">
 
-  <!-- PERSONAL -->
-  <div class="tab-panel active" id="tab-personal">
+  <!-- ══════════════════════════════════════════════════════════════
+       PAGE 1 — Personal Details & ID
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="wpanel {{ 'active' if not account else '' }}" id="wp1">
     <div class="form-section">
       <h3>Personal Details</h3>
       <div class="form-grid">
-        <div class="form-group span-full"><label>Full Name *</label><input type="text" name="full_name" value="{{ account.full_name if account else '' }}" required></div>
-        <div class="form-group"><label>Date of Birth</label><input type="date" name="date_of_birth" value="{{ account.date_of_birth.isoformat() if account and account.date_of_birth else '' }}"></div>
-        <div class="form-group"><label>Gender</label>
+        <div class="form-group span-full">
+          <label>Full Name *</label>
+          <input type="text" name="full_name" id="f-full-name"
+                 value="{{ account.full_name if account else '' }}" required
+                 placeholder="As it appears on official ID">
+        </div>
+        <div class="form-group">
+          <label>Date of Birth</label>
+          <input type="date" name="date_of_birth"
+                 value="{{ account.date_of_birth.isoformat() if account and account.date_of_birth else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Gender</label>
           <select name="gender">
             <option value="">— Select —</option>
-            {% for g in ['Male','Female','Other'] %}<option value="{{ g }}" {{ 'selected' if account and account.gender==g }}>{{ g }}</option>{% endfor %}
+            {% for g in ['Male','Female','Other'] %}
+            <option value="{{ g }}" {{ 'selected' if account and account.gender==g }}>{{ g }}</option>
+            {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Marital Status</label>
+        <div class="form-group">
+          <label>Marital Status</label>
           <select name="marital_status">
             <option value="">— Select —</option>
-            {% for m in ['Single','Married','Widowed','Divorced'] %}<option value="{{ m }}" {{ 'selected' if account and account.marital_status==m }}>{{ m }}</option>{% endfor %}
+            {% for m in ['Single','Married','Widowed','Divorced'] %}
+            <option value="{{ m }}" {{ 'selected' if account and account.marital_status==m }}>{{ m }}</option>
+            {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Nationality</label><input type="text" name="nationality" value="{{ account.nationality if account else '' }}"></div>
-        <div class="form-group"><label>Country of Origin</label><input type="text" name="country_of_origin" value="{{ account.country_of_origin if account else '' }}"></div>
-        <div class="form-group"><label>Residential Status</label>
+        <div class="form-group">
+          <label>Nationality</label>
+          <input type="text" name="nationality"
+                 value="{{ account.nationality if account else '' }}"
+                 placeholder="e.g. Ghanaian">
+        </div>
+        <div class="form-group">
+          <label>Country of Origin</label>
+          <input type="text" name="country_of_origin"
+                 value="{{ account.country_of_origin if account else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Residential Status</label>
           <select name="residential_status">
             <option value="">— Select —</option>
             {% for rs in ['Resident Ghanaian','Non-Resident Ghanaian','Resident Foreigner','Non-Resident Foreigner'] %}
@@ -62,165 +125,295 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Place of Birth</label><input type="text" name="place_of_birth" value="{{ account.place_of_birth if account else '' }}"></div>
-        <div class="form-group"><label>TIN</label><input type="text" name="tin" value="{{ account.tin if account else '' }}" placeholder="Tax Identification Number"></div>
+        <div class="form-group">
+          <label>Place of Birth</label>
+          <input type="text" name="place_of_birth"
+                 value="{{ account.place_of_birth if account else '' }}">
+        </div>
+        <div class="form-group">
+          <label>TIN (Tax ID)</label>
+          <input type="text" name="tin" value="{{ account.tin if account else '' }}"
+                 placeholder="Tax Identification Number">
+        </div>
       </div>
-      <h3>Identification</h3>
+
+      <h3 style="margin-top:1.2rem;">Identification Document</h3>
       <div class="form-grid">
-        <div class="form-group"><label>ID Type</label>
-          <select name="id_type">
+        <div class="form-group">
+          <label>ID Type *</label>
+          <select name="id_type" id="f-id-type" required>
             <option value="">— Select —</option>
-            {% for id in ['Ghana Card','Passport','Voter ID','Driver Licence','SSNIT','Birth Certificate','National ID'] %}
+            {% for id in ['Ghana Card','Passport','Voter ID','Driver Licence','SSNIT','Birth Certificate','National ID','ECOWAS Card','Residence Permit'] %}
             <option value="{{ id }}" {{ 'selected' if account and account.id_type==id }}>{{ id }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>ID Number</label><input type="text" name="id_number" value="{{ account.id_number if account else '' }}"></div>
-        <div class="form-group"><label>Issue Date</label><input type="date" name="id_issue_date" value="{{ account.id_issue_date.isoformat() if account and account.id_issue_date else '' }}"></div>
-        <div class="form-group"><label>Expiry Date</label><input type="date" name="id_expiry_date" value="{{ account.id_expiry_date.isoformat() if account and account.id_expiry_date else '' }}"></div>
-        <div class="form-group"><label>Place of Issue</label><input type="text" name="id_place_of_issue" value="{{ account.id_place_of_issue if account else '' }}"></div>
+        <div class="form-group">
+          <label>ID Number *</label>
+          <input type="text" name="id_number" id="f-id-number"
+                 value="{{ account.id_number if account else '' }}" required
+                 placeholder="e.g. GHA-000000000-0">
+        </div>
+        <div class="form-group">
+          <label>Issue Date</label>
+          <input type="date" name="id_issue_date"
+                 value="{{ account.id_issue_date.isoformat() if account and account.id_issue_date else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Expiry Date</label>
+          <input type="date" name="id_expiry_date"
+                 value="{{ account.id_expiry_date.isoformat() if account and account.id_expiry_date else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Place of Issue</label>
+          <input type="text" name="id_place_of_issue"
+                 value="{{ account.id_place_of_issue if account else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Ghana Card Number</label>
+          <input type="text" name="ghana_card_number"
+                 value="{{ account.ghana_card_number if account else '' }}"
+                 placeholder="GHA-000000000-0"
+                 style="font-family:var(--font-mono);letter-spacing:1px;">
+        </div>
       </div>
     </div>
+    {% if not account %}
+    <div class="wizard-nav">
+      <span class="step-counter">Step 1 of 7</span>
+      <button type="button" class="btn-next" onclick="nextStep(1)">Next: Contact & Bank →</button>
+    </div>
+    {% endif %}
   </div>
 
-  <!-- CONTACT -->
-  <div class="tab-panel" id="tab-contact">
-    <div class="form-section">
-      <h3>Contact Details</h3>
-      <div class="form-grid">
-        <div class="form-group"><label>Phone Number *</label><input type="text" name="phone" value="{{ account.phone if account else '' }}" required></div>
-        <div class="form-group"><label>Secondary Phone</label><input type="text" name="phone2" value="{{ account.phone2 if account else '' }}"></div>
-        <div class="form-group"><label>Email Address</label><input type="email" name="email" value="{{ account.email if account else '' }}"></div>
-        <div class="form-group"><label>Residential Address</label><input type="text" name="address" value="{{ account.address if account else '' }}"></div>
-        <div class="form-group"><label>Postal Address</label><input type="text" name="postal_address" value="{{ account.postal_address if account else '' }}"></div>
-        <div class="form-group"><label>City / Town</label><input type="text" name="city" value="{{ account.city if account else '' }}"></div>
-        <div class="form-group"><label>Country</label><input type="text" name="country" value="{{ account.country if account else 'Ghana' }}"></div>
-        <div class="form-group"><label>GhanaPost GPS / Digital Address</label><input type="text" name="digital_address" value="{{ account.digital_address if account else '' }}" placeholder="GA-000-0000"></div>
+  <!-- ══════════════════════════════════════════════════════════════
+       PAGE 2 — Contact & Bank
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="wpanel {{ 'active' if account else '' }}" id="wp2">
+    {% if account %}<div class="form-section"><h3>Contact Details</h3>{% endif %}
+    {% if not account %}<div class="form-section"><h3>Contact Details</h3>{% endif %}
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Phone Number *</label>
+        <input type="tel" name="phone" id="f-phone"
+               value="{{ account.phone if account else '' }}" required
+               placeholder="0244 000 000">
       </div>
-      <h3>Bank Details (for dividend / withdrawal)</h3>
-      <div class="form-grid">
-        <div class="form-group"><label>Bank Name</label><input type="text" name="bank_name" value="{{ account.bank_name if account else '' }}"></div>
-        <div class="form-group"><label>Branch</label><input type="text" name="bank_branch" value="{{ account.bank_branch if account else '' }}"></div>
-        <div class="form-group"><label>Account Name</label><input type="text" name="bank_account_name" value="{{ account.bank_account_name if account else '' }}"></div>
-        <div class="form-group"><label>Account Number</label><input type="text" name="bank_account_number" value="{{ account.bank_account_number if account else '' }}"></div>
+      <div class="form-group">
+        <label>Alternative Phone</label>
+        <input type="tel" name="phone2"
+               value="{{ account.phone2 if account else '' }}">
       </div>
-      <h3>Spouse &amp; Emergency Contact</h3>
-      <div class="form-grid">
-        <div class="form-group"><label>Spouse Name</label><input type="text" name="spouse_name" value="{{ account.spouse_name if account else '' }}"></div>
-        <div class="form-group"><label>Spouse Phone</label><input type="text" name="spouse_phone" value="{{ account.spouse_phone if account else '' }}"></div>
-        <div class="form-group"><label>Emergency Contact Name</label><input type="text" name="emergency_contact_name" value="{{ account.emergency_contact_name if account else '' }}"></div>
-        <div class="form-group"><label>Relationship</label><input type="text" name="emergency_contact_relation" value="{{ account.emergency_contact_relation if account else '' }}"></div>
-        <div class="form-group"><label>Emergency Contact Phone</label><input type="text" name="emergency_contact_phone" value="{{ account.emergency_contact_phone if account else '' }}"></div>
+      <div class="form-group">
+        <label>Email Address</label>
+        <input type="email" name="email"
+               value="{{ account.email if account else '' }}"
+               placeholder="client@example.com">
+        <span style="font-size:10px;color:var(--grey);">Used for security alerts &amp; notifications</span>
+      </div>
+      <div class="form-group">
+        <label>Country of Residence</label>
+        <input type="text" name="country_of_residence"
+               value="{{ account.country_of_residence if account else 'Ghana' }}">
+      </div>
+      <div class="form-group span-full">
+        <label>Residential Address</label>
+        <input type="text" name="address"
+               value="{{ account.address if account else '' }}"
+               placeholder="Full street address">
+      </div>
+      <div class="form-group">
+        <label>City / Town</label>
+        <input type="text" name="city"
+               value="{{ account.city if account else '' }}">
+      </div>
+      <div class="form-group">
+        <label>Country</label>
+        <input type="text" name="country"
+               value="{{ account.country if account else 'Ghana' }}">
+      </div>
+      <div class="form-group">
+        <label>Postal Address</label>
+        <input type="text" name="postal_address"
+               value="{{ account.postal_address if account else '' }}">
+      </div>
+      <div class="form-group">
+        <label>GhanaPost Digital Address</label>
+        <input type="text" name="digital_address"
+               value="{{ account.digital_address if account else '' }}"
+               placeholder="GA-000-0000">
       </div>
     </div>
+    <h3 style="margin-top:1rem;">Bank Details (for Dividends &amp; Withdrawals)</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Bank Name</label><input type="text" name="bank_name" value="{{ account.bank_name if account else '' }}" placeholder="e.g. GCB Bank"></div>
+      <div class="form-group"><label>Branch</label><input type="text" name="bank_branch" value="{{ account.bank_branch if account else '' }}"></div>
+      <div class="form-group"><label>Account Name</label><input type="text" name="bank_account_name" value="{{ account.bank_account_name if account else '' }}"></div>
+      <div class="form-group"><label>Account Number</label><input type="text" name="bank_account_number" value="{{ account.bank_account_number if account else '' }}"></div>
+    </div>
+    <h3 style="margin-top:1rem;">Spouse &amp; Emergency Contact</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>Spouse Name</label><input type="text" name="spouse_name" value="{{ account.spouse_name if account else '' }}"></div>
+      <div class="form-group"><label>Spouse Phone</label><input type="tel" name="spouse_phone" value="{{ account.spouse_phone if account else '' }}"></div>
+      <div class="form-group"><label>Emergency Contact Name</label><input type="text" name="emergency_contact_name" value="{{ account.emergency_contact_name if account else '' }}"></div>
+      <div class="form-group"><label>Relationship</label><input type="text" name="emergency_contact_relation" value="{{ account.emergency_contact_relation if account else '' }}"></div>
+      <div class="form-group"><label>Emergency Phone</label><input type="tel" name="emergency_contact_phone" value="{{ account.emergency_contact_phone if account else '' }}"></div>
+    </div>
+    {% if not account %}
+    <div class="wizard-nav">
+      <button type="button" class="btn-prev" onclick="prevStep(2)">← Back</button>
+      <span class="step-counter">Step 2 of 7</span>
+      <button type="button" class="btn-next" onclick="nextStep(2)">Next: Employment →</button>
+    </div>
+    {% endif %}
+    {% if account %}</div>{% endif %}
+    {% if not account %}</div>{% endif %}
   </div>
 
-  <!-- EMPLOYMENT -->
-  <div class="tab-panel" id="tab-employment">
+  <!-- ══════════════════════════════════════════════════════════════
+       PAGE 3 — Employment
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="wpanel" id="wp3">
     <div class="form-section">
       <h3>Employment / Business Details</h3>
       <div class="form-grid">
         <div class="form-group"><label>Employment Status</label>
           <select name="employment_status">
             <option value="">— Select —</option>
-            {% for s in ['Employed','Self-Employed','Unemployed','Retired','Student'] %}
-            <option value="{{ s }}" {{ 'selected' if account and account.employment_status==s }}>{{ s }}</option>
+            {% for es in ['Employed','Self-Employed','Retired','Student','Unemployed','Business Owner'] %}
+            <option value="{{ es }}" {{ 'selected' if account and account.employment_status==es }}>{{ es }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="form-group"><label>Occupation</label><input type="text" name="occupation" value="{{ account.occupation if account else '' }}"></div>
-        <div class="form-group"><label>Employer / Business Name</label><input type="text" name="employer" value="{{ account.employer if account else '' }}"></div>
+        <div class="form-group"><label>Employer / Company</label><input type="text" name="employer" value="{{ account.employer if account else '' }}"></div>
         <div class="form-group"><label>Employer Address</label><input type="text" name="employer_address" value="{{ account.employer_address if account else '' }}"></div>
-        <div class="form-group"><label>City / Town</label><input type="text" name="employer_city" value="{{ account.employer_city if account else '' }}"></div>
+        <div class="form-group"><label>Employer City</label><input type="text" name="employer_city" value="{{ account.employer_city if account else '' }}"></div>
         <div class="form-group"><label>Nature of Business</label><input type="text" name="nature_of_business" value="{{ account.nature_of_business if account else '' }}"></div>
-        <div class="form-group"><label>Years Employed</label><input type="text" name="years_employed" value="{{ account.years_employed if account else '' }}"></div>
-        <div class="form-group"><label>Office Phone</label><input type="text" name="office_phone" value="{{ account.office_phone if account else '' }}"></div>
+        <div class="form-group"><label>Years Employed</label><input type="text" name="years_employed" value="{{ account.years_employed if account else '' }}" placeholder="e.g. 5"></div>
+        <div class="form-group"><label>Office Phone</label><input type="tel" name="office_phone" value="{{ account.office_phone if account else '' }}"></div>
         <div class="form-group"><label>Office Email</label><input type="email" name="office_email" value="{{ account.office_email if account else '' }}"></div>
       </div>
     </div>
+    {% if not account %}
+    <div class="wizard-nav">
+      <button type="button" class="btn-prev" onclick="prevStep(3)">← Back</button>
+      <span class="step-counter">Step 3 of 7</span>
+      <button type="button" class="btn-next" onclick="nextStep(3)">Next: Financial →</button>
+    </div>
+    {% endif %}
   </div>
 
-  <!-- FINANCIAL -->
-  <div class="tab-panel" id="tab-financial">
+  <!-- ══════════════════════════════════════════════════════════════
+       PAGE 4 — Financial Information
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="wpanel" id="wp4">
     <div class="form-section">
-      <h3>Financial Information</h3>
+      <h3>Financial Profile</h3>
       <div class="form-grid">
-        <div class="form-group"><label>Gross Annual Income</label>
+        <div class="form-group"><label>Annual Income Range</label>
           <select name="annual_income_range">
             <option value="">— Select —</option>
-            {% for r in ['Under GH₵1,000','GH₵1,000–2,999','GH₵3,000–4,999','GH₵5,000–6,999',
-                         'GH₵7,000–8,999','GH₵9,000–10,999','GH₵11,000–14,999','GH₵15,000–19,999','Over GH₵20,000'] %}
-            <option value="{{ r }}" {{ 'selected' if account and account.annual_income_range==r }}>{{ r }}</option>
+            {% for ir in ['Below GHS 20,000','GHS 20,000–50,000','GHS 50,000–100,000','GHS 100,000–250,000','GHS 250,000–500,000','Above GHS 500,000'] %}
+            <option value="{{ ir }}" {{ 'selected' if account and account.annual_income_range==ir }}>{{ ir }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="form-group"><label>Source of Funds</label>
           <select name="source_of_funds">
             <option value="">— Select —</option>
-            {% for s in ['Employment/Salary','Business Income','Investment Returns','Inheritance','Sale of Property','Savings','Other'] %}
-            <option value="{{ s }}" {{ 'selected' if account and account.source_of_funds==s }}>{{ s }}</option>
+            {% for sf in ['Salary','Business Income','Inheritance','Savings','Pension','Investment Returns','Gift','Other'] %}
+            <option value="{{ sf }}" {{ 'selected' if account and account.source_of_funds==sf }}>{{ sf }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Anticipated Investment Amount</label><input type="text" name="anticipated_investment" value="{{ account.anticipated_investment if account else '' }}" placeholder="e.g. GHS 50,000"></div>
+        <div class="form-group"><label>Anticipated Investment (GHS)</label>
+          <select name="anticipated_investment">
+            <option value="">— Select —</option>
+            {% for ai in ['Below 10,000','10,000–50,000','50,000–200,000','200,000–500,000','Above 500,000'] %}
+            <option value="{{ ai }}" {{ 'selected' if account and account.anticipated_investment==ai }}>{{ ai }}</option>
+            {% endfor %}
+          </select>
+        </div>
         <div class="form-group"><label>Top-Up Frequency</label>
           <select name="topup_frequency">
             <option value="">— Select —</option>
-            {% for f in ['Monthly','Quarterly','Bi-Annually','Annually','Other'] %}
-            <option value="{{ f }}" {{ 'selected' if account and account.topup_frequency==f }}>{{ f }}</option>
+            {% for tf in ['Monthly','Quarterly','Semi-Annual','Annual','Irregular'] %}
+            <option value="{{ tf }}" {{ 'selected' if account and account.topup_frequency==tf }}>{{ tf }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Regular Top-Up Amount (GHS)</label><input type="number" step="0.01" name="regular_topup_amount" value="{{ account.regular_topup_amount if account else '' }}"></div>
+        <div class="form-group"><label>Regular Top-Up Amount (GHS)</label>
+          <input type="number" step="0.01" name="regular_topup_amount"
+                 value="{{ account.regular_topup_amount if account else '' }}">
+        </div>
         <div class="form-group"><label>Withdrawal Frequency</label>
           <select name="withdrawal_frequency">
             <option value="">— Select —</option>
-            {% for f in ['Monthly','Quarterly','Bi-Annually','Annually','Other'] %}
-            <option value="{{ f }}" {{ 'selected' if account and account.withdrawal_frequency==f }}>{{ f }}</option>
+            {% for wf in ['Monthly','Quarterly','Semi-Annual','Annual','Irregular','Never'] %}
+            <option value="{{ wf }}" {{ 'selected' if account and account.withdrawal_frequency==wf }}>{{ wf }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Regular Withdrawal Amount (GHS)</label><input type="number" step="0.01" name="regular_withdrawal_amount" value="{{ account.regular_withdrawal_amount if account else '' }}"></div>
+        <div class="form-group"><label>Regular Withdrawal Amount (GHS)</label>
+          <input type="number" step="0.01" name="regular_withdrawal_amount"
+                 value="{{ account.regular_withdrawal_amount if account else '' }}">
+        </div>
+        <div class="form-group span-full"><label>Other Investments / Financial Products Held</label>
+          <input type="text" name="other_investments"
+                 value="{{ account.other_investments if account else '' }}"
+                 placeholder="e.g. Insurance, Property, Other mutual funds">
+        </div>
+        <div class="form-group span-full"><label>Portfolio Preference</label>
+          <input type="text" name="portfolio_preference"
+                 value="{{ account.portfolio_preference if account else '' }}"
+                 placeholder="e.g. Fixed Income, Growth, Balanced">
+        </div>
       </div>
     </div>
+    {% if not account %}
+    <div class="wizard-nav">
+      <button type="button" class="btn-prev" onclick="prevStep(4)">← Back</button>
+      <span class="step-counter">Step 4 of 7</span>
+      <button type="button" class="btn-next" onclick="nextStep(4)">Next: Account Settings →</button>
+    </div>
+    {% endif %}
   </div>
 
-  <!-- ACCOUNT SETTINGS -->
-  <div class="tab-panel" id="tab-account">
+  <!-- ══════════════════════════════════════════════════════════════
+       PAGE 5 — Account Settings (MUST INCLUDE RM)
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="wpanel" id="wp5">
     <div class="form-section">
-      <h3>Account Type &amp; Settings</h3>
+      <h3>Account Type &amp; Classification</h3>
       <div class="form-grid">
-        <div class="form-group"><label>Account Type *</label>
-          <select name="account_type" required>
+        <div class="form-group">
+          <label>Account Type *</label>
+          <select name="account_type" id="f-acct-type" required>
             {% for t in ['Individual','Individual ITF','Joint','Corporate','Institutional','Pension Fund','Provident Fund','Trust'] %}
             <option value="{{ t }}" {{ 'selected' if account and account.account_type==t or not account and t=='Individual' }}>{{ t }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Mandate</label>
+        <div class="form-group">
+          <label>Mandate</label>
           <select name="mandate">
             <option value="">— Select —</option>
-            <option value="Discretionary" {{ 'selected' if account and account.mandate=='Discretionary' }}>Discretionary</option>
-            <option value="Non-Discretionary" {{ 'selected' if account and account.mandate=='Non-Discretionary' }}>Non-Discretionary</option>
-          </select>
-        </div>
-        <div class="form-group"><label>Category of Investment</label>
-          <select name="category_of_investment">
-            <option value="">— Select —</option>
-            {% for c in ['Wealth Builder','Bonds','Equity','Mixed'] %}
-            <option value="{{ c }}" {{ 'selected' if account and account.category_of_investment==c }}>{{ c }}</option>
+            {% for m in ['Discretionary','Non-Discretionary'] %}
+            <option value="{{ m }}" {{ 'selected' if account and account.mandate==m }}>{{ m }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Client First Contact Via</label>
-          <select name="client_first_contact">
-            <option value="">— Select —</option>
-            {% for c in ['Advertising','Referral','Walk In','Personal Contact','Other'] %}
-            <option value="{{ c }}" {{ 'selected' if account and account.client_first_contact==c }}>{{ c }}</option>
+        <div class="form-group">
+          <label>Base Currency</label>
+          <select name="base_currency">
+            {% for cur, lbl in [('GHS','Ghana Cedi'),('USD','US Dollar'),('EUR','Euro'),('GBP','British Pound'),('CNY','Chinese Yuan'),('NGN','Nigerian Naira')] %}
+            <option value="{{ cur }}" {{ 'selected' if account and account.base_currency==cur or not account and cur=='GHS' }}>{{ cur }} — {{ lbl }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Regulatory Body</label>
+        <div class="form-group">
+          <label>Regulatory Body</label>
           <select name="regulatory_body">
             <option value="">— None —</option>
             {% for rb in ['NPRA','SEC','Bank of Ghana','NIC'] %}
@@ -228,7 +421,8 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Fund Type</label>
+        <div class="form-group">
+          <label>Fund Type</label>
           <select name="fund_type">
             <option value="">— None —</option>
             {% for ft in ['Pension Fund','Provident Fund','Mutual Fund','General'] %}
@@ -236,14 +430,21 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Base Currency</label>
-          <select name="base_currency">
-            {% for cur in [('GHS','Ghanaian Cedi'),('USD','US Dollar'),('EUR','Euro'),('GBP','British Pound'),('CNY','Chinese Yuan'),('NGN','Nigerian Naira')] %}
-            <option value="{{ cur[0] }}" {{ 'selected' if account and account.base_currency==cur[0] or not account and cur[0]=='GHS' }}>{{ cur[0] }} — {{ cur[1] }}</option>
+        <div class="form-group">
+          <label>Category of Investment</label>
+          <select name="category_of_investment">
+            <option value="">— Select —</option>
+            {% for c in ['Wealth Builder','Bonds','Equity','Mixed'] %}
+            <option value="{{ c }}" {{ 'selected' if account and account.category_of_investment==c }}>{{ c }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Investment Objective</label>
+      </div>
+
+      <h3 style="margin-top:1rem;">Investment Profile &amp; Suitability</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Investment Objective</label>
           <select name="investment_objective">
             <option value="">— Select —</option>
             {% for obj in ['Capital Growth','Income','Balanced','Capital Preservation','Retirement','Child Education','Other'] %}
@@ -251,7 +452,8 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Risk Profile</label>
+        <div class="form-group">
+          <label>Risk Profile</label>
           <select name="risk_profile">
             <option value="">— Select —</option>
             {% for rp in ['Low','Low-Medium','Medium','Medium-High','High'] %}
@@ -259,7 +461,8 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Investment Horizon</label>
+        <div class="form-group">
+          <label>Investment Horizon</label>
           <select name="investment_horizon">
             <option value="">— Select —</option>
             {% for ih in ['Short Term (1-3 years)','Medium Term (3-5 years)','Long Term (5-10 years)','10+ years'] %}
@@ -267,7 +470,8 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Investment Knowledge</label>
+        <div class="form-group">
+          <label>Investment Knowledge</label>
           <select name="investment_knowledge">
             <option value="">— Select —</option>
             {% for ik in ['Low','Medium','High'] %}
@@ -275,37 +479,80 @@
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Custodian</label><input type="text" name="custodian" value="{{ account.custodian if account else '' }}"></div>
-        <div class="form-group"><label>CSD Number</label><input type="text" name="csd_number" value="{{ account.csd_number if account else '' }}"></div>
-        <div class="form-group"><label>Management Fee Rate (%)</label><input type="number" step="0.0001" name="management_fee_rate" value="{{ account.management_fee_rate if account else '' }}" placeholder="e.g. 2.0000"></div>
-        <div class="form-group"><label>Statement Delivery</label>
+        <div class="form-group">
+          <label>Client First Contact Via</label>
+          <select name="client_first_contact">
+            <option value="">— Select —</option>
+            {% for c in ['Advertising','Referral','Walk In','Personal Contact','Other'] %}
+            <option value="{{ c }}" {{ 'selected' if account and account.client_first_contact==c }}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <h3 style="margin-top:1rem;">Operations &amp; RM Assignment</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Custodian</label>
+          <input type="text" name="custodian"
+                 value="{{ account.custodian if account else '' }}"
+                 placeholder="e.g. Republic Bank, CAL Bank">
+        </div>
+        <div class="form-group">
+          <label>CSD Number</label>
+          <input type="text" name="csd_number"
+                 value="{{ account.csd_number if account else '' }}">
+        </div>
+        <div class="form-group">
+          <label>Management Fee Rate (%)</label>
+          <input type="number" step="0.0001" name="management_fee_rate"
+                 value="{{ account.management_fee_rate if account else '' }}"
+                 placeholder="e.g. 2.0000">
+        </div>
+        <div class="form-group">
+          <label>Relationship Manager *</label>
+          <select name="relationship_manager_id" id="f-rm" required>
+            <option value="">— Assign an RM —</option>
+            {% for rm in rm_list %}
+            <option value="{{ rm.id }}"
+                    {{ 'selected' if account and account.relationship_manager_id==rm.id }}>
+              {{ rm.full_name }} · {{ rm.staff_id }}
+              ({{ "{:.2f}".format(rm.rm_commission_rate) }}% commission)
+            </option>
+            {% endfor %}
+          </select>
+          {% if not rm_list %}
+          <span style="font-size:10px;color:var(--red);">
+            ⚠ No RMs configured. Go to
+            <a href="{{ url_for('admin.admin_users') }}" style="color:var(--gold);">Staff Management</a>
+            and mark a staff member as RM first.
+          </span>
+          {% endif %}
+        </div>
+        <div class="form-group">
+          <label>Statement Delivery</label>
           <select name="statement_mode">
             <option value="Email" {{ 'selected' if not account or account.statement_mode=='Email' }}>Email</option>
             <option value="Collection" {{ 'selected' if account and account.statement_mode=='Collection' }}>Collection</option>
           </select>
         </div>
-        <div class="form-group"><label>Statement Frequency</label>
+        <div class="form-group">
+          <label>Statement Frequency</label>
           <select name="statement_frequency">
             {% for sf in ['Quarterly','Monthly','Annual'] %}
             <option value="{{ sf }}" {{ 'selected' if account and account.statement_frequency==sf }}>{{ sf }}</option>
             {% endfor %}
           </select>
         </div>
-        <div class="form-group"><label>Dividend Preference</label>
+        <div class="form-group">
+          <label>Dividend Preference</label>
           <select name="dividend_reinvest">
-            <option value="">Send to client</option>
-            <option value="1" {{ 'selected' if account and account.dividend_reinvest }}>Re-invest</option>
+            <option value="">Send dividends to client</option>
+            <option value="1" {{ 'selected' if account and account.dividend_reinvest }}>Re-invest dividends</option>
           </select>
         </div>
-        <div class="form-group"><label>Relationship Manager</label>
-          <select name="relationship_manager_id">
-            <option value="">— None —</option>
-            {% for rm in rm_list %}
-            <option value="{{ rm.id }}" {{ 'selected' if account and account.relationship_manager_id==rm.id }}>{{ rm.full_name }} ({{ rm.staff_id }})</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-group"><label>AML Status</label>
+        <div class="form-group">
+          <label>AML Status</label>
           <select name="aml_status">
             <option value="">— None —</option>
             {% for a in ['PEP','Undesirable','Watch-list','Black List'] %}
@@ -315,84 +562,45 @@
         </div>
       </div>
     </div>
+    {% if not account %}
+    <div class="wizard-nav">
+      <button type="button" class="btn-prev" onclick="prevStep(5)">← Back</button>
+      <span class="step-counter">Step 5 of 7</span>
+      <button type="button" class="btn-next" onclick="nextStep(5)">Next: Beneficiary &amp; KIN →</button>
+    </div>
+    {% endif %}
   </div>
 
-  <!-- BENEFICIARY -->
-  <div class="tab-panel" id="tab-beneficiary">
+  <!-- ══════════════════════════════════════════════════════════════
+       PAGE 6 — Beneficiary & ITF
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="wpanel" id="wp6">
     <div class="form-section">
       <h3>Beneficiary 1</h3>
       <div class="form-grid">
         <div class="form-group"><label>Full Name</label><input type="text" name="beneficiary1_name" value="{{ account.beneficiary1_name if account else '' }}"></div>
-        <div class="form-group"><label>Percentage (%)</label><input type="number" step="0.01" name="beneficiary1_pct" value="{{ account.beneficiary1_pct if account else '' }}"></div>
+        <div class="form-group"><label>Percentage (%)</label><input type="number" step="0.01" max="100" name="beneficiary1_pct" value="{{ account.beneficiary1_pct if account else '' }}"></div>
         <div class="form-group"><label>Relationship</label><input type="text" name="beneficiary1_relation" value="{{ account.beneficiary1_relation if account else '' }}"></div>
         <div class="form-group"><label>Date of Birth</label><input type="date" name="beneficiary1_dob" value="{{ account.beneficiary1_dob.isoformat() if account and account.beneficiary1_dob else '' }}"></div>
       </div>
       <h3>Beneficiary 2</h3>
       <div class="form-grid">
         <div class="form-group"><label>Full Name</label><input type="text" name="beneficiary2_name" value="{{ account.beneficiary2_name if account else '' }}"></div>
-        <div class="form-group"><label>Percentage (%)</label><input type="number" step="0.01" name="beneficiary2_pct" value="{{ account.beneficiary2_pct if account else '' }}"></div>
+        <div class="form-group"><label>Percentage (%)</label><input type="number" step="0.01" max="100" name="beneficiary2_pct" value="{{ account.beneficiary2_pct if account else '' }}"></div>
         <div class="form-group"><label>Relationship</label><input type="text" name="beneficiary2_relation" value="{{ account.beneficiary2_relation if account else '' }}"></div>
         <div class="form-group"><label>Date of Birth</label><input type="date" name="beneficiary2_dob" value="{{ account.beneficiary2_dob.isoformat() if account and account.beneficiary2_dob else '' }}"></div>
       </div>
       <h3>Nominee / Next of Kin</h3>
       <div class="form-grid">
         <div class="form-group"><label>Name</label><input type="text" name="nominee_name" value="{{ account.nominee_name if account else '' }}"></div>
-        <div class="form-group"><label>Phone</label><input type="text" name="nominee_phone" value="{{ account.nominee_phone if account else '' }}"></div>
+        <div class="form-group"><label>Phone</label><input type="tel" name="nominee_phone" value="{{ account.nominee_phone if account else '' }}"></div>
         <div class="form-group"><label>Relationship</label><input type="text" name="nominee_relation" value="{{ account.nominee_relation if account else '' }}"></div>
       </div>
-    </div>
-  </div>
-
-  <!-- AML / PEP -->
-  <div class="tab-panel" id="tab-aml">
-    <div class="form-section">
-      <h3>Politically Exposed Person (PEP) Assessment</h3>
-      <div class="form-grid form-grid-2">
-        <div class="form-group"><label>Is client / family a PEP in Ghana?</label>
-          <select name="is_pep">
-            <option value="">No</option>
-            <option value="1" {{ 'selected' if account and account.is_pep }}>Yes</option>
-          </select>
-        </div>
-        <div class="form-group span-full"><label>PEP Details (if Yes)</label>
-          <textarea name="pep_details" rows="2" style="resize:vertical;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;font-family:var(--font-body);outline:none;width:100%;">{{ account.pep_details if account else '' }}</textarea>
-        </div>
-        <div class="form-group"><label>Is client / family a PEP outside Ghana?</label>
-          <select name="pep_foreign">
-            <option value="">No</option>
-            <option value="1" {{ 'selected' if account and account.pep_foreign }}>Yes</option>
-          </select>
-        </div>
-        <div class="form-group span-full"><label>Foreign PEP Details (if Yes)</label>
-          <textarea name="pep_foreign_details" rows="2" style="resize:vertical;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:var(--white);padding:8px 14px;font-size:13px;font-family:var(--font-body);outline:none;width:100%;">{{ account.pep_foreign_details if account else '' }}</textarea>
-        </div>
-      </div>
-      <h3>Risk Score Assessment</h3>
-      <div style="font-size:12px;color:var(--grey);line-height:2;margin-bottom:1rem;">
-        Score: Low (6) | Medium (7–12) | High (&gt;12)
-      </div>
-      <div class="form-grid form-grid-2">
-        <div class="form-group"><label>Risk Score (1–18)</label><input type="number" name="risk_score" min="1" max="18" value="{{ account.risk_score if account else '' }}"></div>
-        <div class="form-group"><label>Risk Level</label>
-          <select name="risk_score_label">
-            <option value="">— Auto —</option>
-            {% for rl in ['Low','Medium','High'] %}
-            <option value="{{ rl }}" {{ 'selected' if account and account.risk_score_label==rl }}>{{ rl }}</option>
-            {% endfor %}
-          </select>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ITF / JOINT -->
-  <div class="tab-panel" id="tab-itf">
-    <div class="form-section">
-      <h3>In Trust For (ITF) Details</h3>
-      <p style="font-size:12px;color:var(--grey);margin-bottom:1rem;">For accounts held in trust for a minor (under 18). The minor becomes the account holder at age 18.</p>
+      <h3>In Trust For (ITF)</h3>
+      <p style="font-size:12px;color:var(--grey);margin-bottom:.8rem;">For accounts held in trust for a minor. The minor becomes the holder at age 18.</p>
       <div class="form-grid">
         <div class="form-group"><label>ITF Name</label><input type="text" name="itf_name" value="{{ account.itf_name if account else '' }}"></div>
-        <div class="form-group"><label>Relationship to Account Holder</label><input type="text" name="itf_relationship" value="{{ account.itf_relationship if account else '' }}"></div>
+        <div class="form-group"><label>Relationship</label><input type="text" name="itf_relationship" value="{{ account.itf_relationship if account else '' }}"></div>
         <div class="form-group"><label>Date of Birth</label><input type="date" name="itf_dob" value="{{ account.itf_dob.isoformat() if account and account.itf_dob else '' }}"></div>
         <div class="form-group"><label>Gender</label>
           <select name="itf_gender">
@@ -410,37 +618,199 @@
         <div class="form-group"><label>ID Number</label><input type="text" name="itf_id_number" value="{{ account.itf_id_number if account else '' }}"></div>
       </div>
     </div>
+    {% if not account %}
+    <div class="wizard-nav">
+      <button type="button" class="btn-prev" onclick="prevStep(6)">← Back</button>
+      <span class="step-counter">Step 6 of 7</span>
+      <button type="button" class="btn-next" onclick="nextStep(6)">Next: AML &amp; Compliance →</button>
+    </div>
+    {% endif %}
   </div>
 
-  <!-- FATCA / CRS -->
-  <div class="tab-panel" id="tab-fatca">
+  <!-- ══════════════════════════════════════════════════════════════
+       PAGE 7 — AML / PEP / FATCA
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="wpanel" id="wp7">
     <div class="form-section">
-      <h3>FATCA &amp; Common Reporting Standards (CRS)</h3>
-      <div class="form-grid form-grid-2">
-        <div class="form-group"><label>Foreign Citizen (besides Ghana)?</label>
-          <select name="is_foreign_citizen"><option value="">No</option><option value="1" {{ 'selected' if account and account.is_foreign_citizen }}>Yes</option></select>
+      <h3>Politically Exposed Person (PEP) Assessment</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>Is the client a PEP?</label>
+          <select name="is_pep" id="pep-select" onchange="togglePEP()">
+            <option value="">No</option>
+            <option value="1" {{ 'selected' if account and account.is_pep }}>Yes</option>
+          </select>
         </div>
-        <div class="form-group"><label>Foreign Country</label><input type="text" name="foreign_country" value="{{ account.foreign_country if account else '' }}"></div>
-        <div class="form-group span-full"><label>Foreign Residential Address</label><input type="text" name="foreign_address" value="{{ account.foreign_address if account else '' }}"></div>
-        <div class="form-group"><label>Foreign TIN / SSN / NIN</label><input type="text" name="foreign_tin" value="{{ account.foreign_tin if account else '' }}"></div>
+        <div class="form-group" id="pep-details-field" style="{{ 'display:flex' if account and account.is_pep else 'display:none' }}">
+          <label>PEP Details</label>
+          <input type="text" name="pep_details" value="{{ account.pep_details if account else '' }}"
+                 placeholder="Position / Role">
+        </div>
+        <div class="form-group"><label>Foreign PEP?</label>
+          <select name="pep_foreign">
+            <option value="">No</option>
+            <option value="1" {{ 'selected' if account and account.pep_foreign }}>Yes</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Foreign PEP Details</label>
+          <input type="text" name="pep_foreign_details" value="{{ account.pep_foreign_details if account else '' }}"></div>
+      </div>
+
+      <h3 style="margin-top:1rem;">Risk Score Assessment</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>Risk Score (0–100)</label>
+          <input type="number" name="risk_score" min="0" max="100"
+                 value="{{ account.risk_score if account else '' }}" oninput="autoRiskLabel(this.value)">
+        </div>
+        <div class="form-group"><label>Risk Label</label>
+          <select name="risk_score_label" id="risk-label-sel">
+            <option value="">— Select —</option>
+            {% for rl in ['Low','Medium','High','Very High'] %}
+            <option value="{{ rl }}" {{ 'selected' if account and account.risk_score_label==rl }}>{{ rl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <h3 style="margin-top:1rem;">FATCA &amp; Common Reporting Standards (CRS)</h3>
+      <div class="form-grid">
+        <div class="form-group"><label>Foreign Citizen (besides Ghana)?</label>
+          <select name="is_foreign_citizen">
+            <option value="">No</option>
+            <option value="1" {{ 'selected' if account and account.is_foreign_citizen }}>Yes</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Foreign Country</label>
+          <input type="text" name="foreign_country" value="{{ account.foreign_country if account else '' }}"></div>
+        <div class="form-group span-full"><label>Foreign Residential Address</label>
+          <input type="text" name="foreign_address" value="{{ account.foreign_address if account else '' }}"></div>
+        <div class="form-group"><label>Foreign TIN / SSN / NIN</label>
+          <input type="text" name="foreign_tin" value="{{ account.foreign_tin if account else '' }}"></div>
       </div>
     </div>
+
+    <!-- Final submit -->
+    {% if not account %}
+    <div class="wizard-nav">
+      <button type="button" class="btn-prev" onclick="prevStep(7)">← Back</button>
+      <span class="step-counter">Step 7 of 7 — Final Step</span>
+      <button type="submit" class="btn-next" style="background:var(--green);">
+        ✓ Create Account
+      </button>
+    </div>
+    {% endif %}
   </div>
 
-  <!-- FORM ACTIONS -->
+  <!-- Edit mode always shows save button -->
+  {% if account %}
   <div class="flex gap-2" style="justify-content:flex-end;margin-top:1.5rem;">
     <a href="{{ url_for('admin.accounts') }}" class="btn btn-secondary">Cancel</a>
-    <button type="submit" class="btn btn-primary">{{ 'Update Account' if account else 'Create Account' }}</button>
+    <button type="submit" class="btn btn-primary">Update Account</button>
   </div>
+  {% endif %}
   </form>
 </div>
 
 <script>
-function showTab(id, btn) {
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.stab').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + id).classList.add('active');
-  btn.classList.add('active');
+// ── Edit mode: use old tab system ─────────────────────────────────────────────
+{% if account %}
+// In edit mode, show all panels at once as stacked sections
+document.querySelectorAll('.wpanel').forEach(p => p.classList.add('active'));
+document.getElementById('wizard-bar') && (document.getElementById('wizard-bar').style.display = 'none');
+{% endif %}
+
+// ── Wizard state ──────────────────────────────────────────────────────────────
+const TOTAL_STEPS = 7;
+let currentStep = 1;
+
+function showPanel(n) {
+  for (let i = 1; i <= TOTAL_STEPS; i++) {
+    const p = document.getElementById('wp' + i);
+    if (p) p.classList.toggle('active', i === n);
+    const s = document.getElementById('ws' + i);
+    if (s) {
+      s.classList.remove('active','done');
+      if (i < n)  s.classList.add('done');
+      if (i === n) s.classList.add('active');
+    }
+  }
+  currentStep = n;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+function jumpStep(n) {
+  // Only allow jumping to completed steps
+  if (n <= currentStep) showPanel(n);
+}
+
+// Required fields per step
+const REQUIRED = {
+  1: ['f-full-name', 'f-id-type', 'f-id-number'],
+  2: ['f-phone'],
+  3: [],
+  4: [],
+  5: ['f-acct-type', 'f-rm'],
+  6: [],
+  7: [],
+};
+
+function validateStep(n) {
+  const required = REQUIRED[n] || [];
+  let ok = true;
+  required.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const val = el.value.trim();
+    if (!val) {
+      el.classList.add('field-err');
+      el.classList.remove('field-ok');
+      ok = false;
+    } else {
+      el.classList.remove('field-err');
+      el.classList.add('field-ok');
+    }
+  });
+  if (!ok) {
+    // Shake effect
+    const panel = document.getElementById('wp' + n);
+    if (panel) {
+      panel.style.border = '1px solid var(--red)';
+      setTimeout(() => panel.style.border = '', 1500);
+    }
+  }
+  return ok;
+}
+
+function nextStep(n) {
+  if (!validateStep(n)) return;
+  if (n < TOTAL_STEPS) showPanel(n + 1);
+}
+
+function prevStep(n) {
+  if (n > 1) showPanel(n - 1);
+}
+
+// ── PEP toggle ────────────────────────────────────────────────────────────────
+function togglePEP() {
+  const isPEP = document.getElementById('pep-select')?.value === '1';
+  const el = document.getElementById('pep-details-field');
+  if (el) el.style.display = isPEP ? 'flex' : 'none';
+}
+
+// ── Auto risk label from score ────────────────────────────────────────────────
+function autoRiskLabel(score) {
+  const sel = document.getElementById('risk-label-sel');
+  if (!sel) return;
+  const s = parseInt(score);
+  if (isNaN(s)) return;
+  if (s <= 25)      sel.value = 'Low';
+  else if (s <= 50) sel.value = 'Medium';
+  else if (s <= 75) sel.value = 'High';
+  else              sel.value = 'Very High';
+}
+
+// Initialise
+{% if not account %}
+showPanel(1);
+{% endif %}
 </script>
 {% endblock %}

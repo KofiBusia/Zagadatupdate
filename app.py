@@ -1,9 +1,9 @@
-﻿"""
-app.py â€” Zagadat Capital Fund Management System
+"""
+app.py — Zagadat Capital Fund Management System
 ================================================
 Application factory.  Extensions live in extensions.py to avoid
 the circular-import problem:
-  extensions.py â†’ models.py â†’ routes/*.py â†’ app.py
+  extensions.py → models.py → routes/*.py → app.py
 """
 from flask import Flask
 from flask_cors import CORS
@@ -13,7 +13,7 @@ import os
 def create_app():
     app = Flask(__name__)
 
-    # â”€â”€ CONFIG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── CONFIG ────────────────────────────────────────────────────────────
     app.config['SECRET_KEY'] = os.environ.get(
         'SECRET_KEY', 'zagadat-capital-secret-2026-xk9')
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///zagadat.db'
@@ -33,7 +33,7 @@ def create_app():
     app.config['MAIL_DEFAULT_SENDER'] = os.environ.get(
         'MAIL_DEFAULT_SENDER', 'noreply@zagadatcapital.com')
 
-    # â”€â”€ EXTENSIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── EXTENSIONS ────────────────────────────────────────────────────────
     from extensions import db, login_manager, bcrypt, mail
     db.init_app(app)
     login_manager.init_app(app)
@@ -44,22 +44,24 @@ def create_app():
     login_manager.login_view    = 'auth.login'
     login_manager.login_message = ''
 
-    # â”€â”€ BLUEPRINTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── BLUEPRINTS ────────────────────────────────────────────────────────
     from routes.auth        import auth_bp
     from routes.admin       import admin_bp
     from routes.user        import user_bp
     from routes.api         import api_bp
     from routes.reports     import reports_bp
     from routes.sec_reports import sec_bp
+    from routes.migration   import migration_bp
 
     app.register_blueprint(auth_bp)
-    app.register_blueprint(admin_bp,   url_prefix='/admin')
-    app.register_blueprint(user_bp,    url_prefix='/portal')
-    app.register_blueprint(api_bp,     url_prefix='/api')
-    app.register_blueprint(reports_bp, url_prefix='/reports')
-    app.register_blueprint(sec_bp,     url_prefix='/sec')
+    app.register_blueprint(admin_bp,     url_prefix='/admin')
+    app.register_blueprint(user_bp,      url_prefix='/portal')
+    app.register_blueprint(api_bp,       url_prefix='/api')
+    app.register_blueprint(reports_bp,   url_prefix='/reports')
+    app.register_blueprint(sec_bp,       url_prefix='/sec')
+    app.register_blueprint(migration_bp, url_prefix='/migration')
 
-    # â”€â”€ DB + SEED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── DB + SEED ─────────────────────────────────────────────────────────
     with app.app_context():
         db.create_all()
         from utils.seed import seed_defaults

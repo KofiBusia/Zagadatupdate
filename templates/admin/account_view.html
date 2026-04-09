@@ -1,25 +1,57 @@
 {% extends 'base.html' %}
 {% block title %}{{ acc.full_name }} — Zagadat Capital{% endblock %}
+{% block extra_css %}
+<style>
+.inv-section{margin-bottom:1.5rem;}
+.inv-section-hdr{font-size:10px;font-weight:700;color:var(--gold);letter-spacing:2px;
+  text-transform:uppercase;padding:6px 12px;background:rgba(201,168,76,.1);
+  border-left:3px solid var(--gold);border-radius:0 4px 4px 0;margin-bottom:.5rem;}
+.mini-table{width:100%;font-size:11px;border-collapse:collapse;margin-bottom:.3rem;}
+.mini-table th{background:var(--surface);color:var(--grey);font-size:10px;
+  font-weight:600;letter-spacing:.8px;text-transform:uppercase;padding:5px 8px;
+  border-bottom:1px solid var(--border);white-space:nowrap;}
+.mini-table td{padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.03);
+  white-space:nowrap;color:var(--white);}
+.mini-table tr:hover td{background:rgba(201,168,76,.03);}
+.mini-table .num{text-align:right;font-family:var(--font-mono);}
+.mini-table .total-row td{background:rgba(26,26,46,.8);color:var(--gold);
+  font-weight:700;border-top:1px solid rgba(201,168,76,.3);}
+.sell-btn{background:transparent;border:1px solid rgba(231,76,60,.4);color:var(--red);
+  border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;font-family:var(--font-body);
+  transition:all .2s;text-decoration:none;display:inline-block;}
+.sell-btn:hover{background:rgba(231,76,60,.1);border-color:var(--red);}
+.sold-badge{font-size:9px;color:var(--grey);border:1px solid rgba(255,255,255,.12);
+  border-radius:3px;padding:2px 6px;}
+</style>
+{% endblock %}
 {% block content %}
 <div class="page-content">
   <div class="page-header">
     <div>
       <h1>{{ acc.full_name }}</h1>
-      <p>{{ acc.account_number }} · {{ acc.account_type }} · {{ acc.status }}</p>
+      <p>{{ acc.account_number }} &middot; {{ acc.account_type }} &middot;
+         <span class="badge badge-{{ 'approved' if acc.status=='APPROVED' else 'pending' if acc.status=='PENDING' else 'rejected' }}">
+           {{ acc.status }}</span>
+         {% if acc.kyc_complete %}
+         <span class="badge badge-approved" style="margin-left:4px;">KYC ✓</span>
+         {% else %}
+         <span class="badge badge-pending" style="margin-left:4px;">KYC Incomplete</span>
+         {% endif %}
+      </p>
     </div>
-    <div class="flex gap-1">
-      <a href="{{ url_for('admin.edit_account', acc_id=acc.id) }}" class="btn btn-secondary btn-sm">Edit</a>
-      {% for cur in ['GHS','USD','EUR','GBP','CNY','NGN'] %}
+    <div class="flex gap-1" style="flex-wrap:wrap;">
+      <a href="{{ url_for('admin.edit_account', acc_id=acc.id) }}" class="btn btn-secondary btn-sm">✏ Edit</a>
+      {% for cur in ['GHS','USD','EUR','GBP'] %}
       <a href="{{ url_for('reports.pvr', account_number=acc.account_number, currency=cur) }}"
-         target="_blank" class="btn btn-secondary btn-sm">PDF {{ cur }}</a>
+         target="_blank" class="btn btn-secondary btn-sm">📄 {{ cur }}</a>
       {% endfor %}
       <a href="{{ url_for('reports.statement', account_number=acc.account_number) }}"
-         target="_blank" class="btn btn-primary btn-sm">Statement</a>
+         target="_blank" class="btn btn-primary btn-sm">📋 Statement</a>
       {% if current_user.has_permission('approve_account') %}
       <a href="{{ url_for('admin.assign_fee', acc_id=acc.id) }}" class="btn btn-secondary btn-sm">💰 Fees</a>
       {% if acc.status == 'PENDING' %}
       <form method="POST" action="{{ url_for('admin.approve_account', acc_id=acc.id) }}" style="display:inline;">
-        <button class="btn btn-success btn-sm">✓ Approve</button>
+        <button class="btn btn-success btn-sm">✓ Approve Account</button>
       </form>
       <form method="POST" action="{{ url_for('admin.reject_account', acc_id=acc.id) }}" style="display:inline;"
             onsubmit="const r=prompt('Rejection reason:');if(!r)return false;this.querySelector('[name=reason]').value=r;">
@@ -31,170 +63,739 @@
     </div>
   </div>
 
-  <!-- SUMMARY CARDS -->
+  {# ── Pending alerts ── #}
+  {% if pending_txns or pending_invs or pending_reqs %}
+  <div style="background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.35);border-radius:8px;
+              padding:12px 16px;margin-bottom:1.2rem;">
+    <strong style="color:var(--gold);">⚠ Pending Approvals</strong>
+    <div style="margin-top:6px;display:flex;gap:1.5rem;flex-wrap:wrap;font-size:12px;">
+      {% if pending_txns %}<span>💳 {{ pending_txns|length }} transaction(s) pending</span>{% endif %}
+      {% if pending_invs %}<span>📈 {{ pending_invs|length }} investment(s) pending</span>{% endif %}
+      {% if pending_reqs %}<span>📬 {{ pending_reqs|length }} client request(s) pending</span>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── KPI Cards ── #}
   {% set total_inv = namespace(v=0) %}
   {% for i in investments %}{% set total_inv.v = total_inv.v + i.computed_mkt_value %}{% endfor %}
   {% set cash = acc.cash_balance %}
   <div class="grid grid-4 mb-2">
-    <div class="card">
-      <div class="card-title">Portfolio Value</div>
+    <div class="card" style="border-top:2px solid var(--gold);">
+      <div class="card-title">Total Portfolio</div>
       <div class="stat-value gold-value">{{ "{:,.2f}".format(total_inv.v + cash) }}</div>
-      <div class="stat-sub">{{ acc.base_currency }}</div>
+      <div class="stat-sub">GHS (approved only)</div>
     </div>
-    <div class="card">
-      <div class="card-title">Investments</div>
-      <div class="stat-value">{{ "{:,.2f}".format(total_inv.v) }}</div>
-      <div class="stat-sub">{{ investments|length }} holdings</div>
+    <div class="card" style="border-top:2px solid #27AE60;">
+      <div class="card-title">Investments (MtM)</div>
+      <div class="stat-value" style="color:var(--green);">{{ "{:,.2f}".format(total_inv.v) }}</div>
+      <div class="stat-sub">{{ investments|length }} approved holding(s)</div>
     </div>
-    <div class="card">
-      <div class="card-title">Cash Balance</div>
-      <div class="stat-value">{{ "{:,.2f}".format(cash) }}</div>
-      <div class="stat-sub">Available for investment</div>
+    <div class="card" style="border-top:2px solid #3498DB;">
+      <div class="card-title">Cash Balance (GHS)</div>
+      <div class="stat-value" style="color:#3498DB;">{{ "{:,.2f}".format(cash) }}</div>
+      <div class="stat-sub">Approved &amp; available{% if acc.pending_deposits > 0 %} · +{{ "{:,.0f}".format(acc.pending_deposits) }} pending{% endif %}</div>
     </div>
     <div class="card">
       <div class="card-title">Account Type</div>
-      <div class="stat-value" style="font-size:1.2rem;">{{ acc.account_type }}</div>
-      <div class="stat-sub">{{ acc.risk_profile or 'Risk not set' }}</div>
+      <div class="stat-value" style="font-size:1.1rem;">{{ acc.account_type }}</div>
+      <div class="stat-sub">{{ acc.risk_profile or 'Risk not set' }} · {{ acc.mandate or '—' }}</div>
     </div>
   </div>
 
-  <!-- ACCOUNT INFO -->
+  {# ── FX strip ── #}
+  {% if fx %}
+  <div style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:7px;
+              padding:8px 14px;margin-bottom:1.2rem;font-size:11px;color:var(--grey);
+              display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center;">
+    <span style="color:var(--gold);font-weight:600;">Live FX (→ GHS):</span>
+    {% for ccy, info in fx.items() %}{% if ccy != 'GHS' %}
+    <span><strong style="color:var(--white);">{{ ccy }}</strong> {{ "{:,.4f}".format(info.rate) }}</span>
+    {% endif %}{% endfor %}
+  </div>
+  {% endif %}
+
   <div class="grid grid-2 mb-2">
+    {# ── Account details ── #}
     <div class="card">
-      <div class="card-title" style="margin-bottom:1rem;">Account Details</div>
+      <div class="card-title" style="margin-bottom:.8rem;">Account Details</div>
       <table style="width:100%;font-size:12px;border-collapse:collapse;">
-        {% set rows = [
+        {% for label, val in [
           ('Phone', acc.phone), ('Email', acc.email or '—'),
-          ('Country', acc.country or '—'), ('City', acc.city or '—'),
-          ('Custodian', acc.custodian or '—'), ('Currency', acc.base_currency),
-          ('Regulatory Body', acc.regulatory_body or '—'), ('Fund Type', acc.fund_type or '—'),
+          ('Base Currency', acc.base_currency), ('City', acc.city or '—'),
+          ('Custodian', acc.custodian or '—'), ('CSD No.', acc.csd_number or '—'),
           ('Investment Objective', acc.investment_objective or '—'),
-          ('Risk Profile', acc.risk_profile or '—'),
-          ('Mandate', acc.mandate or '—'),
+          ('Risk Profile', acc.risk_profile or '—'), ('Mandate', acc.mandate or '—'),
           ('RM', acc.relationship_manager.full_name if acc.relationship_manager else '—'),
-          ('Mgmt Fee Rate', ('{:.2f}%'.format(acc.management_fee_rate)) if acc.management_fee_rate else '—'),
+          ('Mgmt Fee', ('{:.2f}%'.format(acc.management_fee_rate)) if acc.management_fee_rate else '—'),
           ('AML Status', acc.aml_status or '—'),
-          ('PEP', 'Yes' if acc.is_pep else 'No'),
         ] %}
-        {% for label, val in rows %}
         <tr>
-          <td style="color:var(--grey);padding:5px 0;width:45%;">{{ label }}</td>
+          <td style="color:var(--grey);padding:3px 0;width:42%;">{{ label }}</td>
           <td style="color:var(--white);">{{ val }}</td>
         </tr>
         {% endfor %}
       </table>
     </div>
-    <div class="card">
-      <div class="card-title" style="margin-bottom:1rem;">Nominee / Next of Kin</div>
-      <table style="width:100%;font-size:12px;border-collapse:collapse;">
-        {% set rows2 = [
-          ('Name', acc.nominee_name or '—'),
-          ('Phone', acc.nominee_phone or '—'),
-          ('Relationship', acc.nominee_relation or '—'),
-        ] %}
-        {% for label, val in rows2 %}
-        <tr>
-          <td style="color:var(--grey);padding:5px 0;width:45%;">{{ label }}</td>
-          <td style="color:var(--white);">{{ val }}</td>
-        </tr>
-        {% endfor %}
-      </table>
-      <hr class="divider">
-      <div class="card-title" style="margin-bottom:0.5rem;">New Transaction</div>
-      <div class="flex gap-1">
-        <a href="{{ url_for('admin.new_transaction') }}?acc={{ acc.account_number }}" class="btn btn-primary btn-sm">+ Deposit / Withdrawal</a>
-        <a href="{{ url_for('admin.new_investment') }}?acc={{ acc.account_number }}" class="btn btn-secondary btn-sm">+ Investment</a>
+
+    {# ── Actions ── #}
+    <div style="display:flex;flex-direction:column;gap:1rem;">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:.8rem;">Actions</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a href="{{ url_for('admin.new_transaction') }}?acc={{ acc.account_number }}"
+             class="btn btn-primary btn-sm">+ Transaction</a>
+          {% if acc.cash_balance > 0 %}
+          <a href="{{ url_for('admin.new_investment') }}?acc={{ acc.account_number }}"
+             class="btn btn-secondary btn-sm">+ Investment</a>
+          {% else %}
+          <button class="btn btn-secondary btn-sm" disabled title="Approve a deposit first"
+                  style="opacity:.4;cursor:not-allowed;">+ Investment</button>
+          {% endif %}
+          <a href="{{ url_for('admin.client_requests') }}?acc={{ acc.account_number }}"
+             class="btn btn-secondary btn-sm">📬 Requests</a>
+        </div>
+        {% if acc.cash_balance == 0 %}
+        <p style="font-size:11px;color:var(--gold);margin-top:.5rem;">
+          ⚠ No approved cash. Approve a deposit before entering investments.
+        </p>
+        {% endif %}
+      </div>
+      {# ── RM Assign ── #}
+      {% if current_user.has_permission('approve_account') and rm_list %}
+      <div class="card">
+        <div class="card-title" style="margin-bottom:.6rem;">Assign Relationship Manager</div>
+        <form method="POST" action="{{ url_for('admin.assign_rm', acc_id=acc.id) }}">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select name="relationship_manager_id" style="flex:1;font-size:12px;">
+              <option value="">— Remove RM —</option>
+              {% for rm in rm_list %}
+              <option value="{{ rm.id }}" {{ 'selected' if acc.relationship_manager_id == rm.id }}>
+                {{ rm.full_name }}
+              </option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+          </div>
+          {% if acc.relationship_manager %}
+          <p style="font-size:10px;color:var(--grey);margin-top:4px;">
+            Current: {{ acc.relationship_manager.full_name }}
+          </p>
+          {% endif %}
+        </form>
+      </div>
+      {% endif %}
+      <div class="card">
+        <div class="card-title" style="margin-bottom:.6rem;">Nominee / Next of Kin</div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          {% for label, val in [
+            ('Name', acc.nominee_name or '—'),
+            ('Phone', acc.nominee_phone or '—'),
+            ('Relationship', acc.nominee_relation or '—'),
+          ] %}
+          <tr>
+            <td style="color:var(--grey);padding:3px 0;width:42%;">{{ label }}</td>
+            <td style="color:var(--white);">{{ val }}</td>
+          </tr>
+          {% endfor %}
+        </table>
       </div>
     </div>
   </div>
 
-  <!-- INVESTMENTS -->
+  {# ── PENDING TRANSACTIONS ── #}
+  {% if pending_txns %}
+  <div class="card mb-2" style="border-left:3px solid var(--gold);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">
+      <div class="card-title" style="color:var(--gold);">⏳ Pending Transactions — Awaiting Approval</div>
+    </div>
+    <table class="mini-table">
+      <thead>
+        <tr><th>Date</th><th>Type</th><th>Description</th><th>Ref</th>
+            <th class="num">Amount (orig.)</th><th class="num">GHS Equiv.</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for t in pending_txns %}
+        <tr>
+          <td>{{ t.txn_date.strftime('%d %b %Y') if t.txn_date else '—' }}</td>
+          <td><span class="badge badge-pending" style="font-size:9px;">{{ t.txn_type }}</span></td>
+          <td style="color:var(--grey);">{{ t.description or '—' }}</td>
+          <td style="color:var(--grey);font-family:var(--font-mono);font-size:10px;">{{ t.reference or '—' }}</td>
+          <td class="num">{{ t.currency }} {{ "{:,.2f}".format(t.amount) }}</td>
+          <td class="num" style="color:var(--gold);">
+            {% if t.fx_rate_used and t.currency != 'GHS' %}
+            ≈ {{ "{:,.2f}".format(t.amount * t.fx_rate_used) }}
+            {% else %}{{ "{:,.2f}".format(t.amount) }}{% endif %}
+          </td>
+          <td>
+            {% if current_user.has_permission('approve_investment') %}
+            <form method="POST" action="{{ url_for('admin.approve_transaction', txn_id=t.id) }}" style="display:inline;">
+              <button type="submit" class="btn btn-success btn-sm" style="font-size:10px;padding:3px 10px;">✓ Approve</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.reject_transaction', txn_id=t.id) }}" style="display:inline;"
+                  onsubmit="const n=prompt('Reason:');if(!n)return false;this.querySelector('[name=note]').value=n;">
+              <input type="hidden" name="note" value="">
+              <button type="submit" class="btn btn-danger btn-sm" style="font-size:10px;padding:3px 10px;">✕</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# ── PENDING INVESTMENTS ── #}
+  {% if pending_invs %}
+  <div class="card mb-2" style="border-left:3px solid #3498DB;">
+    <div class="card-title" style="color:#3498DB;margin-bottom:.8rem;">⏳ Pending Investments — Awaiting Approval</div>
+    <table class="mini-table">
+      <thead>
+        <tr><th>Asset Class</th><th>Security</th><th>Issuer</th><th>Trade Date</th>
+            <th class="num">Cost (orig.)</th><th class="num">GHS Cost</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for inv in pending_invs %}
+        {% set buy_txn = inv.transactions|selectattr('txn_type','eq','BUY')|first %}
+        <tr>
+          <td><span class="badge badge-pending" style="font-size:9px;">{{ inv.asset_class.replace('_',' ') }}</span></td>
+          <td>{{ inv.security_name or inv.sub_type or '—' }}</td>
+          <td style="color:var(--grey);">{{ inv.issuer or '—' }}</td>
+          <td>{{ inv.trade_date.strftime('%d %b %Y') if inv.trade_date else '—' }}</td>
+          <td class="num">{{ inv.currency }} {{ "{:,.2f}".format(inv.total_cost or 0) }}</td>
+          <td class="num" style="color:var(--gold);">
+            {% if buy_txn and buy_txn.fx_rate_used %}
+            {{ "{:,.2f}".format((inv.total_cost or 0) * buy_txn.fx_rate_used) }}
+            {% else %}{{ "{:,.2f}".format(inv.total_cost or 0) }}{% endif %}
+          </td>
+          <td>
+            {% if current_user.has_permission('approve_investment') %}
+            <form method="POST" action="{{ url_for('admin.approve_investment', inv_id=inv.id) }}" style="display:inline;">
+              <button type="submit" class="btn btn-success btn-sm" style="font-size:10px;">✓ Approve</button>
+            </form>
+            <a href="{{ url_for('admin.edit_investment', inv_id=inv.id) }}"
+               class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# ════════════════════════════════════════════════════════════════════
+     APPROVED INVESTMENT HOLDINGS — Per Asset Class with full columns
+     ════════════════════════════════════════════════════════════════════ #}
   <div class="card mb-2">
-    <div class="card-title" style="margin-bottom:1rem;">Investment Holdings</div>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Asset Class</th><th>Security</th><th>Issuer</th>
-            <th>Trade Date</th><th>Maturity</th>
-            <th class="text-right">Face / Qty</th>
-            <th class="text-right">Rate / Cpn%</th>
-            <th class="text-right">Mkt Value (GHS)</th>
-            <th>Status</th><th>Actions</th>
-          </tr>
-        </thead>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">
+      <div class="card-title">Investment Holdings (Approved)</div>
+      <a href="{{ url_for('admin.new_investment') }}?acc={{ acc.account_number }}"
+         class="btn btn-secondary btn-sm">+ Add Investment</a>
+    </div>
+
+    {% set inv_by_class = {
+      'MONEY_MARKET':    investments|selectattr('asset_class','eq','MONEY_MARKET')|list,
+      'GOVT_SECURITIES': investments|selectattr('asset_class','eq','GOVT_SECURITIES')|list,
+      'BONDS':           investments|selectattr('asset_class','eq','BONDS')|list,
+      'EUROBONDS':       investments|selectattr('asset_class','eq','EUROBONDS')|list,
+      'GSE_EQUITIES':    investments|selectattr('asset_class','eq','GSE_EQUITIES')|list,
+      'GLOBAL_EQUITIES': investments|selectattr('asset_class','eq','GLOBAL_EQUITIES')|list,
+      'PRIVATE_EQUITY':  investments|selectattr('asset_class','eq','PRIVATE_EQUITY')|list,
+      'PRIVATE_DEBT':    investments|selectattr('asset_class','eq','PRIVATE_DEBT')|list,
+      'MUTUAL_FUNDS':    investments|selectattr('asset_class','eq','MUTUAL_FUNDS')|list,
+    } %}
+
+    {# ── MONEY MARKET ── #}
+    {% set mm_list = inv_by_class['MONEY_MARKET'] %}
+    {% if mm_list %}
+    <div class="inv-section">
+      <div class="inv-section-hdr">Money Market — Fixed Deposits &amp; Call Accounts</div>
+      <div style="overflow-x:auto;">
+      <table class="mini-table">
+        <thead><tr>
+          <th>Trade Date</th><th>Issuer / Bank</th><th>Instrument</th><th>Tenor</th>
+          <th class="num">Principal (GHS)</th><th class="num">Rate %</th>
+          <th class="num">Days Run</th><th class="num">Accrued Int.</th>
+          <th class="num">Mkt Value (GHS)</th><th>Maturity</th><th>Actions</th>
+        </tr></thead>
         <tbody>
-          {% for inv in investments %}
+          {% set mm_tot = namespace(mv=0) %}
+          {% for i in mm_list %}
+          {% set mm_tot.mv = mm_tot.mv + i.computed_mkt_value %}
           <tr>
-            <td><span class="badge badge-pending">{{ inv.asset_class.replace('_',' ') }}</span></td>
-            <td>{{ inv.security_name or inv.sub_type or '—' }}</td>
-            <td style="color:var(--grey);">{{ inv.issuer or '—' }}</td>
-            <td class="mono">{{ inv.trade_date.strftime('%d %b %Y') if inv.trade_date else '—' }}</td>
-            <td class="mono">{{ inv.maturity_date.strftime('%d %b %Y') if inv.maturity_date else '—' }}</td>
-            <td class="num">{{ "{:,.2f}".format(inv.face_value or inv.quantity or 0) }}</td>
-            <td class="num">{{ "{:.2f}".format(inv.coupon_rate or inv.interest_rate or 0) }}%</td>
-            <td class="num text-gold">{{ "{:,.2f}".format(inv.computed_mkt_value) }}</td>
-            <td><span class="badge badge-{{ 'approved' if inv.status=='APPROVED' else 'pending' }}">{{ inv.status }}</span></td>
+            <td>{{ i.trade_date.strftime('%d %b %Y') if i.trade_date else '—' }}</td>
+            <td>{{ i.issuer or '—' }}</td><td>{{ i.sub_type or 'Fixed Deposit' }}</td>
+            <td>{{ (i.tenor|string + 'd') if i.tenor else '—' }}</td>
+            <td class="num">{{ "{:,.2f}".format(i.total_cost or 0) }}</td>
+            <td class="num">{{ "{:.2f}".format(i.interest_rate or i.coupon_rate or 0) }}%</td>
+            <td class="num">{{ i.days_run }}</td>
+            <td class="num">{{ "{:,.2f}".format(i.accrued_interest) }}</td>
+            <td class="num" style="color:var(--gold);">{{ "{:,.2f}".format(i.computed_mkt_value) }}</td>
+            <td>{{ i.maturity_date.strftime('%d %b %Y') if i.maturity_date else '—' }}</td>
             <td>
-              <a href="{{ url_for('admin.edit_investment', inv_id=inv.id) }}" class="btn btn-secondary btn-sm">Edit</a>
-              {% if inv.status == 'PENDING' and current_user.has_permission('approve_investment') %}
-              <form method="POST" action="{{ url_for('admin.approve_investment', inv_id=inv.id) }}" style="display:inline;">
-                <button type="submit" class="btn btn-success btn-sm">Approve</button>
-              </form>
-              {% endif %}
+              <a href="{{ url_for('admin.sell_investment', inv_id=i.id) }}" class="sell-btn">Sell</a>
+              <a href="{{ url_for('admin.edit_investment', inv_id=i.id) }}" class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
             </td>
           </tr>
-          {% else %}
-          <tr><td colspan="10" style="text-align:center;color:var(--grey);padding:2rem;">No investments found.</td></tr>
           {% endfor %}
+          <tr class="total-row"><td colspan="8" style="text-align:right;font-size:10px;">TOTAL</td>
+            <td class="num">{{ "{:,.2f}".format(mm_tot.mv) }}</td><td></td><td></td></tr>
         </tbody>
       </table>
+      </div>
     </div>
+    {% endif %}
+
+    {# ── GOVERNMENT SECURITIES ── #}
+    {% set gs_list = inv_by_class['GOVT_SECURITIES'] %}
+    {% if gs_list %}
+    <div class="inv-section">
+      <div class="inv-section-hdr">Government Securities — T-Bills, Notes &amp; Bonds</div>
+      <div style="overflow-x:auto;">
+      <table class="mini-table">
+        <thead><tr>
+          <th>Trade Date</th><th>Issuer</th><th>Instrument</th><th>Tenor</th>
+          <th class="num">Face Value (GHS)</th><th class="num">Rate %</th>
+          <th class="num">Days Run</th><th class="num">Accrued Int.</th>
+          <th class="num">Mkt Value (GHS)</th><th>Maturity</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% set gs_tot = namespace(mv=0) %}
+          {% for i in gs_list %}
+          {% set gs_tot.mv = gs_tot.mv + i.computed_mkt_value %}
+          <tr>
+            <td>{{ i.trade_date.strftime('%d %b %Y') if i.trade_date else '—' }}</td>
+            <td>{{ i.issuer or 'GOG' }}</td><td>{{ i.sub_type or 'T-Bill' }}</td>
+            <td>{{ (i.tenor|string + 'd') if i.tenor else '—' }}</td>
+            <td class="num">{{ "{:,.2f}".format(i.face_value or i.total_cost or 0) }}</td>
+            <td class="num">{{ "{:.2f}".format(i.interest_rate or i.coupon_rate or 0) }}%</td>
+            <td class="num">{{ i.days_run }}</td>
+            <td class="num">{{ "{:,.2f}".format(i.accrued_interest) }}</td>
+            <td class="num" style="color:var(--gold);">{{ "{:,.2f}".format(i.computed_mkt_value) }}</td>
+            <td>{{ i.maturity_date.strftime('%d %b %Y') if i.maturity_date else '—' }}</td>
+            <td>
+              <a href="{{ url_for('admin.sell_investment', inv_id=i.id) }}" class="sell-btn">Redeem</a>
+              <a href="{{ url_for('admin.edit_investment', inv_id=i.id) }}" class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="total-row"><td colspan="8" style="text-align:right;font-size:10px;">TOTAL</td>
+            <td class="num">{{ "{:,.2f}".format(gs_tot.mv) }}</td><td></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── BONDS ── #}
+    {% set bonds_list = inv_by_class['BONDS'] + inv_by_class['EUROBONDS'] %}
+    {% if bonds_list %}
+    <div class="inv-section">
+      <div class="inv-section-hdr">Bonds &amp; Eurobonds — Corporate &amp; Sovereign Debt</div>
+      <div style="overflow-x:auto;">
+      <table class="mini-table">
+        <thead><tr>
+          <th>Trade Date</th><th>Issuer</th><th>Class</th>
+          <th class="num">Face Value</th><th class="num">Cpn %</th><th class="num">Clean Px %</th>
+          <th>Last Cpn</th><th class="num">Accrued</th>
+          <th class="num">Mkt Value (GHS)</th><th>Maturity</th><th>Days Mat.</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% set b_tot = namespace(mv=0) %}
+          {% for i in bonds_list %}
+          {% set b_tot.mv = b_tot.mv + i.computed_mkt_value %}
+          <tr>
+            <td>{{ i.trade_date.strftime('%d %b %Y') if i.trade_date else '—' }}</td>
+            <td>{{ i.issuer or '—' }}</td>
+            <td><span class="badge badge-pending" style="font-size:9px;">{{ i.asset_class.replace('_',' ') }}</span></td>
+            <td class="num">{{ "{:,.2f}".format(i.face_value or 0) }}</td>
+            <td class="num">{{ "{:.2f}".format(i.coupon_rate or 0) }}%</td>
+            <td class="num">{{ "{:.2f}".format(i.clean_price or 0) }}%</td>
+            <td>{{ i.last_coupon_date.strftime('%d %b %Y') if i.last_coupon_date else '—' }}</td>
+            <td class="num">{{ "{:,.2f}".format(i.accrued_interest) }}</td>
+            <td class="num" style="color:var(--gold);">{{ "{:,.2f}".format(i.computed_mkt_value) }}</td>
+            <td>{{ i.maturity_date.strftime('%d %b %Y') if i.maturity_date else '—' }}</td>
+            <td class="num">{{ i.days_to_maturity if i.days_to_maturity is not none else '—' }}</td>
+            <td>
+              <a href="{{ url_for('admin.sell_investment', inv_id=i.id) }}" class="sell-btn">Sell</a>
+              <a href="{{ url_for('admin.edit_investment', inv_id=i.id) }}" class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="total-row"><td colspan="8" style="text-align:right;font-size:10px;">TOTAL</td>
+            <td class="num">{{ "{:,.2f}".format(b_tot.mv) }}</td><td></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── GSE EQUITIES ── #}
+    {% set gse_list = inv_by_class['GSE_EQUITIES'] %}
+    {% if gse_list %}
+    <div class="inv-section">
+      <div class="inv-section-hdr">GSE Listed Equities</div>
+      <div style="overflow-x:auto;">
+      <table class="mini-table">
+        <thead><tr>
+          <th>Symbol</th><th>Security Name</th><th>Sector</th><th>Trade Date</th>
+          <th class="num">Qty</th><th class="num">Unit Cost</th><th class="num">Total Cost</th>
+          <th class="num">Mkt Price</th><th class="num">Mkt Value (GHS)</th>
+          <th class="num">Gain/Loss</th><th class="num">Return %</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% set gse_tot = namespace(cost=0, mv=0) %}
+          {% for i in gse_list %}
+          {% set cost = i.total_cost or 0 %}
+          {% set mv = i.computed_mkt_value %}
+          {% set gain = mv - cost %}
+          {% set gse_tot.cost = gse_tot.cost + cost %}
+          {% set gse_tot.mv = gse_tot.mv + mv %}
+          <tr>
+            <td style="color:var(--gold);font-weight:600;">{{ i.symbol or '—' }}</td>
+            <td>{{ i.security_name or '—' }}</td><td style="color:var(--grey);">{{ i.sector or '—' }}</td>
+            <td>{{ i.trade_date.strftime('%d %b %Y') if i.trade_date else '—' }}</td>
+            <td class="num">{{ "{:,.0f}".format(i.quantity or 0) }}</td>
+            <td class="num">{{ "{:,.4f}".format(i.unit_cost or 0) }}</td>
+            <td class="num">{{ "{:,.2f}".format(cost) }}</td>
+            <td class="num">{{ "{:,.4f}".format(i.current_price or 0) }}</td>
+            <td class="num" style="color:var(--gold);">{{ "{:,.2f}".format(mv) }}</td>
+            <td class="num" style="color:{{ 'var(--green)' if gain >= 0 else 'var(--red)' }};">
+              {{ "{:,.2f}".format(gain) }}</td>
+            <td class="num" style="color:{{ 'var(--green)' if gain >= 0 else 'var(--red)' }};">
+              {{ "{:.2f}".format(gain / cost * 100 if cost else 0) }}%</td>
+            <td>
+              <a href="{{ url_for('admin.sell_investment', inv_id=i.id) }}" class="sell-btn">Sell</a>
+              <a href="{{ url_for('admin.edit_investment', inv_id=i.id) }}" class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="total-row">
+            <td colspan="6" style="text-align:right;font-size:10px;">TOTAL</td>
+            <td class="num">{{ "{:,.2f}".format(gse_tot.cost) }}</td><td></td>
+            <td class="num">{{ "{:,.2f}".format(gse_tot.mv) }}</td>
+            <td class="num" style="color:{{ 'var(--green)' if gse_tot.mv >= gse_tot.cost else 'var(--red)' }};">
+              {{ "{:,.2f}".format(gse_tot.mv - gse_tot.cost) }}</td>
+            <td></td><td></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── GLOBAL EQUITIES ── #}
+    {% set gl_list = inv_by_class['GLOBAL_EQUITIES'] %}
+    {% if gl_list %}
+    <div class="inv-section">
+      <div class="inv-section-hdr">Global Equities — International Listed Securities</div>
+      <div style="overflow-x:auto;">
+      <table class="mini-table">
+        <thead><tr>
+          <th>Symbol</th><th>Security Name</th><th>Exchange</th><th>Sector</th>
+          <th class="num">Qty</th><th class="num">Unit Cost (USD)</th>
+          <th class="num">Mkt Price (USD)</th><th class="num">Mkt Value (GHS)</th>
+          <th class="num">Gain/Loss (GHS)</th><th class="num">Return %</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% set gl_tot = namespace(mv=0) %}
+          {% for i in gl_list %}
+          {% set mv = i.computed_mkt_value %}
+          {% set gl_tot.mv = gl_tot.mv + mv %}
+          {# cost_ghs: for global equities, total_cost is in USD; multiply by USD→GHS rate #}
+          {% set cost_ghs = (i.total_cost or 0) * (fx.get('USD', {}).get('rate', 10.95) if i.currency == 'USD' else fx.get(i.currency or 'USD', {}).get('rate', 1.0) if i.currency and i.currency != 'GHS' else (i.total_cost or 0)) %}
+          {% set gain = mv - cost_ghs %}
+          <tr>
+            <td style="color:var(--gold);font-weight:600;">{{ i.symbol or '—' }}</td>
+            <td>{{ i.security_name or '—' }}</td>
+            <td>{{ i.exchange or '—' }}</td><td style="color:var(--grey);">{{ i.sector or '—' }}</td>
+            <td class="num">{{ "{:,.0f}".format(i.quantity or 0) }}</td>
+            <td class="num">{{ "{:,.4f}".format(i.unit_cost or 0) }}</td>
+            <td class="num">{{ "{:,.4f}".format(i.current_price or 0) }}</td>
+            <td class="num" style="color:var(--gold);">{{ "{:,.2f}".format(mv) }}</td>
+            <td class="num" style="color:{{ 'var(--green)' if gain >= 0 else 'var(--red)' }};">
+              {{ "{:,.2f}".format(gain) }}</td>
+            <td class="num" style="color:{{ 'var(--green)' if gain >= 0 else 'var(--red)' }};">
+              {{ "{:.2f}".format(gain / cost_ghs * 100 if cost_ghs else 0) }}%</td>
+            <td>
+              <a href="{{ url_for('admin.sell_investment', inv_id=i.id) }}" class="sell-btn">Sell</a>
+              <a href="{{ url_for('admin.edit_investment', inv_id=i.id) }}" class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="total-row"><td colspan="7" style="text-align:right;font-size:10px;">TOTAL MKT VALUE (GHS)</td>
+            <td class="num">{{ "{:,.2f}".format(gl_tot.mv) }}</td><td></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── PRIVATE EQUITY ── #}
+    {% set pe_list = inv_by_class['PRIVATE_EQUITY'] %}
+    {% if pe_list %}
+    <div class="inv-section">
+      <div class="inv-section-hdr">Private Equity — Fund &amp; Direct Investments</div>
+      <div style="overflow-x:auto;">
+      <table class="mini-table">
+        <thead><tr>
+          <th>Fund / Company</th><th>Sector</th><th>Vintage</th><th>Geography</th><th>Stage</th>
+          <th class="num">Committed</th><th class="num">Called</th>
+          <th class="num">Distributions</th><th class="num">NAV / Fair Value</th>
+          <th class="num">MOIC</th><th class="num">IRR %</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% set pe_tot = namespace(nav=0) %}
+          {% for i in pe_list %}
+          {% set nav = i.nav or i.computed_mkt_value %}
+          {% set pe_tot.nav = pe_tot.nav + nav %}
+          {% set called = i.called or 0 %}
+          {% set moic_val = i.moic if i.moic else ((nav + (i.distributions or 0)) / called if called > 0 else None) %}
+          <tr>
+            <td style="font-weight:600;">{{ i.security_name or i.issuer or '—' }}</td>
+            <td style="color:var(--grey);">{{ i.sector or '—' }}</td>
+            <td>{{ i.vintage_year or '—' }}</td>
+            <td>{{ i.geography or '—' }}</td><td>{{ i.stage or '—' }}</td>
+            <td class="num">{{ "{:,.2f}".format(i.committed or 0) }}</td>
+            <td class="num">{{ "{:,.2f}".format(i.called or 0) }}</td>
+            <td class="num">{{ "{:,.2f}".format(i.distributions or 0) }}</td>
+            <td class="num" style="color:var(--gold);">{{ "{:,.2f}".format(nav) }}</td>
+            <td class="num">{{ "{:.2f}×".format(moic_val) if moic_val else '—' }}</td>
+            <td class="num">{{ "{:.2f}%".format(i.irr) if i.irr else '—' }}</td>
+            <td>
+              <a href="{{ url_for('admin.sell_investment', inv_id=i.id) }}" class="sell-btn">Divest</a>
+              <a href="{{ url_for('admin.edit_investment', inv_id=i.id) }}" class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="total-row"><td colspan="8" style="text-align:right;font-size:10px;">TOTAL NAV</td>
+            <td class="num">{{ "{:,.2f}".format(pe_tot.nav) }}</td><td></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── PRIVATE DEBT ── #}
+    {% set pd_list = inv_by_class['PRIVATE_DEBT'] %}
+    {% if pd_list %}
+    <div class="inv-section">
+      <div class="inv-section-hdr">Private Debt — Direct Lending &amp; Structured Credit</div>
+      <div style="overflow-x:auto;">
+      <table class="mini-table">
+        <thead><tr>
+          <th>Borrower / Fund</th><th>Sector</th><th>Instrument</th><th>Rating</th>
+          <th class="num">Facility Size</th><th class="num">Outstanding</th>
+          <th class="num">Rate %</th><th>Maturity</th><th>PIK</th>
+          <th class="num">Total Cost</th><th class="num">Gain/Loss</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% set pd_tot = namespace(out=0) %}
+          {% for i in pd_list %}
+          {% set out = i.outstanding or i.computed_mkt_value %}
+          {% set pd_tot.out = pd_tot.out + out %}
+          {% set gain = out - (i.total_cost or 0) %}
+          <tr>
+            <td style="font-weight:600;">{{ i.security_name or i.issuer or '—' }}</td>
+            <td style="color:var(--grey);">{{ i.sector or '—' }}</td>
+            <td>{{ i.sub_type or 'Term Loan' }}</td>
+            <td><span style="font-size:10px;color:var(--gold);">{{ i.rating or '—' }}</span></td>
+            <td class="num">{{ "{:,.2f}".format(i.face_value or i.total_cost or 0) }}</td>
+            <td class="num" style="color:var(--gold);">{{ "{:,.2f}".format(out) }}</td>
+            <td class="num">{{ "{:.2f}".format(i.coupon_rate or i.interest_rate or 0) }}%</td>
+            <td>{{ i.maturity_date.strftime('%d %b %Y') if i.maturity_date else '—' }}</td>
+            <td>{{ 'Yes' if i.pik else 'No' }}</td>
+            <td class="num">{{ "{:,.2f}".format(i.total_cost or 0) }}</td>
+            <td class="num" style="color:{{ 'var(--green)' if gain >= 0 else 'var(--red)' }};">
+              {{ "{:,.2f}".format(gain) }}</td>
+            <td>
+              <a href="{{ url_for('admin.sell_investment', inv_id=i.id) }}" class="sell-btn">Redeem</a>
+              <a href="{{ url_for('admin.edit_investment', inv_id=i.id) }}" class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="total-row"><td colspan="5" style="text-align:right;font-size:10px;">TOTAL OUTSTANDING</td>
+            <td class="num">{{ "{:,.2f}".format(pd_tot.out) }}</td>
+            <td colspan="6"></td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── MUTUAL FUNDS ── #}
+    {% set mf_list = inv_by_class['MUTUAL_FUNDS'] %}
+    {% if mf_list %}
+    <div class="inv-section">
+      <div class="inv-section-hdr">Mutual Funds &amp; Unit Trusts</div>
+      <div style="overflow-x:auto;">
+      <table class="mini-table">
+        <thead><tr>
+          <th>Security Name</th><th>Fund Type</th><th>Trade Date</th>
+          <th class="num">Units</th><th class="num">Unit Cost</th><th class="num">Total Cost</th>
+          <th class="num">NAV Price</th><th class="num">Mkt Value (GHS)</th>
+          <th class="num">Gain/Loss</th><th class="num">Return %</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          {% set mf_tot = namespace(cost=0, mv=0) %}
+          {% for i in mf_list %}
+          {% set cost = i.total_cost or 0 %}
+          {% set mv = i.computed_mkt_value %}
+          {% set gain = mv - cost %}
+          {% set mf_tot.cost = mf_tot.cost + cost %}
+          {% set mf_tot.mv = mf_tot.mv + mv %}
+          <tr>
+            <td style="font-weight:600;">{{ i.security_name or '—' }}</td>
+            <td style="color:var(--grey);">{{ i.sub_type or 'Mutual Fund' }}</td>
+            <td>{{ i.trade_date.strftime('%d %b %Y') if i.trade_date else '—' }}</td>
+            <td class="num">{{ "{:,.4f}".format(i.quantity or 0) }}</td>
+            <td class="num">{{ "{:,.4f}".format(i.unit_cost or 0) }}</td>
+            <td class="num">{{ "{:,.2f}".format(cost) }}</td>
+            <td class="num">{{ "{:,.4f}".format(i.current_price or i.nav or 0) }}</td>
+            <td class="num" style="color:var(--gold);">{{ "{:,.2f}".format(mv) }}</td>
+            <td class="num" style="color:{{ 'var(--green)' if gain >= 0 else 'var(--red)' }};">
+              {{ "{:,.2f}".format(gain) }}</td>
+            <td class="num" style="color:{{ 'var(--green)' if gain >= 0 else 'var(--red)' }};">
+              {{ "{:.2f}".format(gain / cost * 100 if cost else 0) }}%</td>
+            <td>
+              <a href="{{ url_for('admin.sell_investment', inv_id=i.id) }}" class="sell-btn">Redeem</a>
+              <a href="{{ url_for('admin.edit_investment', inv_id=i.id) }}" class="btn btn-secondary btn-sm" style="font-size:10px;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+          <tr class="total-row">
+            <td colspan="5" style="text-align:right;font-size:10px;">TOTAL</td>
+            <td class="num">{{ "{:,.2f}".format(mf_tot.cost) }}</td><td></td>
+            <td class="num">{{ "{:,.2f}".format(mf_tot.mv) }}</td>
+            <td class="num" style="color:{{ 'var(--green)' if mf_tot.mv >= mf_tot.cost else 'var(--red)' }};">
+              {{ "{:,.2f}".format(mf_tot.mv - mf_tot.cost) }}</td>
+            <td></td><td></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+    {% endif %}
+
+    {# Empty state #}
+    {% if not investments %}
+    <div style="text-align:center;color:var(--grey);padding:2rem;">
+      No approved investments. Ensure a deposit is approved first, then add investments.
+    </div>
+    {% endif %}
   </div>
 
-  <!-- TRANSACTIONS -->
+  {# ── SOLD INVESTMENTS ── #}
+  {% if sold_invs is defined and sold_invs %}
+  <div class="card mb-2" style="opacity:.75;">
+    <div class="card-title" style="margin-bottom:.8rem;color:var(--grey);">Sold / Redeemed Investments</div>
+    <table class="mini-table">
+      <thead><tr>
+        <th>Asset Class</th><th>Security</th><th>Issuer</th>
+        <th class="num">Original Cost (GHS)</th><th>Notes</th>
+      </tr></thead>
+      <tbody>
+        {% for i in sold_invs %}
+        <tr>
+          <td><span class="sold-badge">{{ i.asset_class.replace('_',' ') }}</span></td>
+          <td style="color:var(--grey);">{{ i.security_name or '—' }}</td>
+          <td style="color:var(--grey);">{{ i.issuer or '—' }}</td>
+          <td class="num" style="color:var(--grey);">{{ "{:,.2f}".format(i.total_cost or 0) }}</td>
+          <td style="color:var(--grey);font-size:11px;">{{ i.notes or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# ═══════════════════════════════════════════════════════════════════
+     TRANSACTION HISTORY — All transactions with full detail
+     ═══════════════════════════════════════════════════════════════════ #}
   <div class="card">
-    <div class="card-title" style="margin-bottom:1rem;">Transaction History</div>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr><th>Date</th><th>Type</th><th>Description</th><th>Reference</th><th class="text-right">Debit</th><th class="text-right">Credit</th><th class="text-right">Balance</th></tr>
-        </thead>
-        <tbody>
-          {% set balance = namespace(v=0) %}
-          {% for t in transactions|reverse %}
-            {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}
-              {% set balance.v = balance.v + t.amount %}
-            {% else %}
-              {% set balance.v = balance.v - t.amount %}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem;">
+      <div class="card-title">Transaction History</div>
+      <div style="display:flex;gap:6px;">
+        <a href="{{ url_for('admin.new_transaction') }}?acc={{ acc.account_number }}"
+           class="btn btn-secondary btn-sm">+ Transaction</a>
+        <a href="{{ url_for('reports.statement', account_number=acc.account_number) }}"
+           target="_blank" class="btn btn-primary btn-sm">📋 PDF Statement</a>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="mini-table">
+      <thead>
+        <tr>
+          <th>Date</th><th>Type</th><th>Description</th><th>Reference</th>
+          <th>Currency</th><th class="num">Amount (orig.)</th>
+          <th class="num">GHS Amount</th><th>Status</th>
+          <th class="num">Running Balance (GHS)</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set CREDIT = ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}
+        {% set running = namespace(v=0) %}
+        {% for t in transactions %}
+        {% if t.status == 'APPROVED' %}
+          {% set ghs = t.amount_ghs if t.amount_ghs is not none else t.amount %}
+          {% if t.txn_type in CREDIT %}{% set running.v = running.v + ghs %}
+          {% else %}{% set running.v = running.v - ghs %}{% endif %}
+        {% endif %}
+        <tr style="{{ 'background:rgba(201,168,76,.03);' if t.status=='PENDING' else 'opacity:.55;' if t.status=='REJECTED' else '' }}">
+          <td>{{ t.txn_date.strftime('%d %b %Y') if t.txn_date else '—' }}</td>
+          <td>
+            <span class="badge badge-{{ 'approved' if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] else 'pending' }}"
+                  style="font-size:9px;">{{ t.txn_type }}</span>
+          </td>
+          <td style="color:var(--grey);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            {{ t.description or '—' }}</td>
+          <td style="font-family:var(--font-mono);font-size:10px;color:var(--grey);">{{ t.reference or '—' }}</td>
+          <td>{{ t.currency }}</td>
+          <td class="num">{{ "{:,.2f}".format(t.amount) }}</td>
+          <td class="num {{ 'text-green' if t.txn_type in CREDIT else 'text-red' }}">
+            {% if t.status == 'APPROVED' %}
+            {{ "{:,.2f}".format(t.amount_ghs if t.amount_ghs is not none else t.amount) }}
+            {% elif t.status == 'PENDING' %}
+            <span style="color:var(--gold);font-size:10px;">PENDING</span>
+            {% else %}<span style="color:var(--grey);">—</span>{% endif %}
+          </td>
+          <td>
+            <span class="badge badge-{{ 'approved' if t.status=='APPROVED' else 'rejected' if t.status=='REJECTED' else 'pending' }}"
+                  style="font-size:9px;">{{ t.status }}</span>
+          </td>
+          <td class="num" style="{{ 'color:var(--green)' if running.v >= 0 else 'color:var(--red)' }}">
+            {% if t.status == 'APPROVED' %}{{ "{:,.2f}".format(running.v) }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if t.status == 'PENDING' and current_user.has_permission('approve_investment') %}
+            <form method="POST" action="{{ url_for('admin.approve_transaction', txn_id=t.id) }}" style="display:inline;">
+              <button type="submit" class="btn btn-success btn-sm" style="font-size:9px;padding:2px 7px;">✓</button>
+            </form>
+            <form method="POST" action="{{ url_for('admin.reject_transaction', txn_id=t.id) }}" style="display:inline;"
+                  onsubmit="const n=prompt('Reason:');if(!n)return false;this.querySelector('[name=note]').value=n;">
+              <input type="hidden" name="note" value="">
+              <button type="submit" class="btn btn-danger btn-sm" style="font-size:9px;padding:2px 7px;">✕</button>
+            </form>
             {% endif %}
-          {% endfor %}
-          {% set running = namespace(v=0) %}
-          {% for t in transactions %}
-          {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}
-            {% set running.v = running.v + t.amount %}
-          {% else %}
-            {% set running.v = running.v - t.amount %}
-          {% endif %}
-          <tr>
-            <td class="mono">{{ t.txn_date.strftime('%d %b %Y') }}</td>
-            <td><span class="badge badge-{{ 'approved' if t.txn_type in ['DEPOSIT','TRANSFER_IN'] else 'pending' }}">{{ t.txn_type }}</span></td>
-            <td style="color:var(--grey);">{{ t.description or '—' }}</td>
-            <td class="mono" style="color:var(--grey);">{{ t.reference or '—' }}</td>
-            {% if t.txn_type in ['DEPOSIT','TRANSFER_IN','DIVIDEND','COUPON','SELL'] %}
-            <td class="num">—</td>
-            <td class="num text-green">{{ "{:,.2f}".format(t.amount) }}</td>
-            {% else %}
-            <td class="num text-red">{{ "{:,.2f}".format(t.amount) }}</td>
-            <td class="num">—</td>
-            {% endif %}
-            <td class="num">{{ "{:,.2f}".format(running.v) }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="7" style="text-align:center;color:var(--grey);padding:2rem;">No transactions.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" style="text-align:center;color:var(--grey);padding:1.5rem;">No transactions.</td></tr>
+        {% endfor %}
+        {% if transactions %}
+        <tr style="background:rgba(201,168,76,.08);">
+          <td colspan="8" style="font-weight:700;color:var(--gold);padding:7px 8px;font-size:11px;">
+            CLOSING BALANCE (GHS — Approved only)
+          </td>
+          <td class="num" style="font-weight:700;color:var(--gold);">
+            {{ "{:,.2f}".format(acc.cash_balance) }}</td>
+          <td></td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
     </div>
   </div>
 </div>

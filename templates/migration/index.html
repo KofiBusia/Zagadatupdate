@@ -1,0 +1,442 @@
+{% extends 'base.html' %}
+{% block title %}Data Migration — Zagadat Capital{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Step number badge ── */
+.step-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--gold); color: var(--black);
+  font-size: 11px; font-weight: 800; flex-shrink: 0;
+  margin-right: 8px;
+}
+.step-badge-sm {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(201,168,76,.15); color: var(--gold);
+  font-size: 10px; font-weight: 800; flex-shrink: 0;
+  margin-right: 8px; border: 1px solid rgba(201,168,76,.3);
+}
+
+/* ── Template download cards ── */
+.tmpl-grid  { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap: 14px; }
+.tmpl-card  {
+  background: var(--dark2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.tmpl-card:hover  { border-color: var(--gold); box-shadow: 0 4px 20px rgba(201,168,76,.12); }
+.tmpl-icon        { font-size: 1.8rem; }
+.tmpl-title       { font-size: .84rem; font-weight: 700; color: var(--white); }
+.tmpl-sub         { font-size: .7rem; color: var(--grey); line-height: 1.6; flex: 1; }
+.tmpl-meta        { font-size: .67rem; color: rgba(201,168,76,.6); }
+
+/* ── Import cards ── */
+.import-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap: 16px; }
+.import-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); display: flex; flex-direction: column;
+}
+.import-card-hdr {
+  padding: 14px 16px 10px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 4px;
+}
+.import-card-title { font-size: .82rem; font-weight: 700; color: var(--white); }
+.import-card-body  { padding: 16px; flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.badge-superadmin  {
+  font-size: 9px; background: rgba(201,168,76,.1); color: var(--gold);
+  border: 1px solid rgba(201,168,76,.25); border-radius: 10px; padding: 2px 8px;
+  margin-left: auto; white-space: nowrap;
+}
+
+/* ── File drop zone ── */
+.drop-zone {
+  border: 1.5px dashed var(--border); border-radius: var(--radius);
+  padding: 18px 12px; text-align: center; cursor: pointer;
+  transition: border-color .2s, background .2s; position: relative;
+}
+.drop-zone:hover, .drop-zone.drag-over {
+  border-color: var(--gold); background: rgba(201,168,76,.04);
+}
+.drop-zone input[type=file] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer;
+}
+.drop-icon   { font-size: 1.4rem; color: var(--grey); margin-bottom: 4px; }
+.drop-text   { font-size: .75rem; color: var(--grey); }
+.drop-hint   { font-size: .67rem; color: rgba(138,138,154,.6); margin-top: 2px; }
+.drop-name   { font-size: .72rem; color: var(--gold); margin-top: 4px; display: none; }
+
+/* ── Overwrite toggle ── */
+.ow-row { display: flex; align-items: center; gap: 8px; }
+.ow-row input[type=checkbox] { accent-color: var(--gold); width: 14px; height: 14px; }
+.ow-row label { font-size: .72rem; color: var(--grey); cursor: pointer; }
+
+/* ── History table ── */
+.err-box {
+  display: none; background: rgba(231,76,60,.06); border: 1px solid rgba(231,76,60,.2);
+  border-radius: 4px; padding: 8px 10px; margin-top: 6px;
+  font-size: 10.5px; color: var(--red); font-family: var(--font-mono);
+  max-height: 120px; overflow-y: auto; white-space: pre-wrap;
+}
+
+/* ── Tip box ── */
+.tip-box {
+  background: rgba(201,168,76,.05); border: 1px solid rgba(201,168,76,.15);
+  border-radius: var(--radius); padding: 10px 14px;
+  font-size: .72rem; color: var(--grey); line-height: 1.7;
+}
+.tip-box strong { color: var(--gold); }
+
+/* ── Section header ── */
+.mig-section-hdr {
+  font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--grey);
+  padding-bottom: 8px; border-bottom: 1px solid rgba(201,168,76,.12);
+  margin: 0 0 16px; display: flex; align-items: center; gap: 8px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-content">
+
+  <div class="page-header">
+    <div>
+      <h1>Data Migration Portal</h1>
+      <p>Super Admin only — import clients, investments, transactions, and staff from external systems</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       STEP 1 — DOWNLOAD TEMPLATES
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div class="card" style="margin-bottom:20px;border-left:3px solid var(--gold);">
+    <div class="card-title" style="padding:16px 20px 12px;border-bottom:1px solid var(--border);
+         display:flex;align-items:center;gap:0;margin-bottom:0;">
+      <span class="step-badge">1</span>
+      Download Migration Templates
+    </div>
+    <div style="padding:18px 20px;">
+
+      <div class="tip-box" style="margin-bottom:16px;">
+        <strong>How it works:</strong> Download the template(s) matching your data.
+        Each workbook contains column headers that map exactly to the database.
+        Fill in your data, then upload using the forms in Step 2.
+        Do <strong>not</strong> change column header names.
+      </div>
+
+      <div class="tmpl-grid">
+
+        <div class="tmpl-card">
+          <div class="tmpl-icon">&#128100;</div>
+          <div class="tmpl-title">Client Accounts</div>
+          <div class="tmpl-sub">
+            All KYC fields: name, contact, ID, employment, bank details, beneficiaries,
+            risk profile, investment objective, and opening cash balance.
+          </div>
+          <div class="tmpl-meta">&#128196; XLSX · 2 sheets (Data + Instructions)</div>
+          <a href="{{ url_for('migration.template_accounts') }}"
+             class="btn btn-secondary btn-sm" style="margin-top:auto">
+            &#11015; Download Accounts Template
+          </a>
+        </div>
+
+        <div class="tmpl-card">
+          <div class="tmpl-icon">&#128202;</div>
+          <div class="tmpl-title">Investment Portfolio</div>
+          <div class="tmpl-sub">
+            9-sheet workbook — one sheet per asset class:
+            Govt Securities · Bonds · Eurobonds · GSE Equities · Global Equities ·
+            Money Market · Mutual Funds · Private Equity · Private Debt.
+          </div>
+          <div class="tmpl-meta">&#128196; XLSX · 9 asset-class sheets</div>
+          <a href="{{ url_for('migration.template_investments') }}"
+             class="btn btn-secondary btn-sm" style="margin-top:auto">
+            &#11015; Download Portfolio Template
+          </a>
+        </div>
+
+        <div class="tmpl-card">
+          <div class="tmpl-icon">&#128260;</div>
+          <div class="tmpl-title">Transaction History</div>
+          <div class="tmpl-sub">
+            Full transaction history: DEPOSIT, WITHDRAWAL, DIVIDEND, COUPON, BUY, SELL, FEE.
+            Includes a reference sheet with valid transaction type codes.
+          </div>
+          <div class="tmpl-meta">&#128196; XLSX or CSV · 2 sheets</div>
+          <a href="{{ url_for('migration.template_transactions') }}"
+             class="btn btn-secondary btn-sm" style="margin-top:auto">
+            &#11015; Download Transactions Template
+          </a>
+        </div>
+
+        <div class="tmpl-card">
+          <div class="tmpl-icon">&#128084;</div>
+          <div class="tmpl-title">Staff Users</div>
+          <div class="tmpl-sub">
+            Bulk-create staff accounts: staff_id, full_name, email, and role.
+            Includes a reference sheet with valid roles and permission levels.
+            Super Admin only.
+          </div>
+          <div class="tmpl-meta">&#128196; XLSX · 2 sheets (Users + Roles Reference)</div>
+          <a href="{{ url_for('migration.template_staff') }}"
+             class="btn btn-secondary btn-sm" style="margin-top:auto">
+            &#11015; Download Staff Template
+          </a>
+        </div>
+
+      </div>
+
+      <div class="tip-box" style="margin-top:14px;">
+        <strong>Excel templates:</strong> Each sheet column header is the exact database field name.
+        Use XLSX format for investments (multi-sheet required). CSV is also accepted for accounts and transactions.
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       STEP 2 — IMPORT DATA
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div style="margin-bottom:6px;">
+    <div class="mig-section-hdr">
+      <span class="step-badge-sm">2</span>
+      Upload &amp; Import Data
+    </div>
+  </div>
+
+  <div class="import-grid" style="margin-bottom:24px;">
+
+    <!-- 2a. Import Accounts -->
+    <div class="import-card">
+      <div class="import-card-hdr">
+        <span class="step-badge-sm">2a</span>
+        <span class="import-card-title">Import Client Accounts</span>
+      </div>
+      <div class="import-card-body">
+        <form method="POST" action="{{ url_for('migration.import_accounts') }}"
+              enctype="multipart/form-data" id="form-accounts">
+          <div class="drop-zone" id="dz-accounts" onclick="document.getElementById('f-accounts').click()">
+            <div class="drop-icon">&#9729;</div>
+            <div class="drop-text">Drop file or click to browse</div>
+            <div class="drop-hint">.CSV or .XLSX</div>
+            <div class="drop-name" id="dn-accounts"></div>
+            <input type="file" name="file" id="f-accounts" accept=".csv,.xlsx" required
+                   onchange="showFile(this,'dn-accounts')" style="display:none;">
+          </div>
+          <div class="ow-row">
+            <input type="checkbox" name="overwrite" id="ow-a">
+            <label for="ow-a">Overwrite duplicate records (match by phone)</label>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%;">
+            &#11014; Import Accounts
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 2b. Import Investments -->
+    <div class="import-card">
+      <div class="import-card-hdr">
+        <span class="step-badge-sm">2b</span>
+        <span class="import-card-title">Import Portfolio Investments</span>
+      </div>
+      <div class="import-card-body">
+        <form method="POST" action="{{ url_for('migration.import_investments') }}"
+              enctype="multipart/form-data" id="form-inv">
+          <div class="drop-zone" id="dz-inv" onclick="document.getElementById('f-inv').click()">
+            <div class="drop-icon">&#128202;</div>
+            <div class="drop-text">Drop portfolio Excel here</div>
+            <div class="drop-hint">Multi-sheet .XLSX required</div>
+            <div class="drop-name" id="dn-inv"></div>
+            <input type="file" name="file" id="f-inv" accept=".xlsx" required
+                   onchange="showFile(this,'dn-inv')" style="display:none;">
+          </div>
+          <div class="ow-row">
+            <input type="checkbox" name="overwrite" id="ow-i">
+            <label for="ow-i">Overwrite duplicate records (match by security name + account)</label>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%;">
+            &#11014; Import Investments
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 2c. Import Transactions -->
+    <div class="import-card">
+      <div class="import-card-hdr">
+        <span class="step-badge-sm">2c</span>
+        <span class="import-card-title">Import Transaction History</span>
+      </div>
+      <div class="import-card-body">
+        <form method="POST" action="{{ url_for('migration.import_transactions') }}"
+              enctype="multipart/form-data" id="form-txn">
+          <div class="drop-zone" id="dz-txn" onclick="document.getElementById('f-txn').click()">
+            <div class="drop-icon">&#128260;</div>
+            <div class="drop-text">Drop file or click to browse</div>
+            <div class="drop-hint">.CSV or .XLSX</div>
+            <div class="drop-name" id="dn-txn"></div>
+            <input type="file" name="file" id="f-txn" accept=".csv,.xlsx" required
+                   onchange="showFile(this,'dn-txn')" style="display:none;">
+          </div>
+          <div class="tip-box" style="font-size:.67rem;">
+            All imported transactions are set to <strong>APPROVED</strong> status and will
+            immediately affect account cash balances.
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%;">
+            &#11014; Import Transactions
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 2d. Import Staff -->
+    <div class="import-card">
+      <div class="import-card-hdr">
+        <span class="step-badge-sm">2d</span>
+        <span class="import-card-title">Import Staff Users</span>
+        {% if not current_user.is_super_admin %}
+        <span class="badge-superadmin">Super Admin only</span>
+        {% endif %}
+      </div>
+      <div class="import-card-body">
+        {% if current_user.is_super_admin %}
+        <form method="POST" action="{{ url_for('migration.import_staff') }}"
+              enctype="multipart/form-data" id="form-staff">
+          <div class="drop-zone" id="dz-staff" onclick="document.getElementById('f-staff').click()">
+            <div class="drop-icon">&#128084;</div>
+            <div class="drop-text">Drop staff template here</div>
+            <div class="drop-hint">.XLSX from template above</div>
+            <div class="drop-name" id="dn-staff"></div>
+            <input type="file" name="file" id="f-staff" accept=".xlsx" required
+                   onchange="showFile(this,'dn-staff')" style="display:none;">
+          </div>
+          <div class="tip-box" style="font-size:.67rem;">
+            Each new user is created with a random temporary password.
+            Staff must log in and change their password on first use.
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="width:100%;">
+            &#11014; Import Staff
+          </button>
+        </form>
+        {% else %}
+        <div style="text-align:center;padding:28px 16px;color:var(--grey);">
+          <div style="font-size:2rem;margin-bottom:8px;">&#128274;</div>
+          <p style="font-size:.75rem;">Only the Super Admin can bulk-import staff users.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       MIGRATION HISTORY
+  ══════════════════════════════════════════════════════════════════════ -->
+  <div class="mig-section-hdr">
+    <span class="step-badge-sm">&#128202;</span>
+    Migration History
+    <span style="margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0;color:rgba(138,138,154,.6);">
+      Last 30 operations
+    </span>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Type</th>
+            <th>File</th>
+            <th class="num">Total</th>
+            <th class="num">Imported</th>
+            <th class="num">Failed</th>
+            <th>Status</th>
+            <th>By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr>
+            <td class="mono" style="font-size:11px;white-space:nowrap;">
+              {{ log.executed_at.strftime('%d %b %Y %H:%M') }}
+            </td>
+            <td style="font-size:12px;">{{ log.source_system or 'Data Migration' }}</td>
+            <td style="font-size:11px;color:var(--grey);max-width:180px;
+                overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                title="{{ log.filename }}">
+              {{ log.filename or '—' }}
+            </td>
+            <td class="num mono">{{ log.records_in }}</td>
+            <td class="num text-green">{{ log.records_ok }}</td>
+            <td class="num {% if log.records_err %}text-red{% else %}text-green{% endif %}">
+              {{ log.records_err }}
+            </td>
+            <td>
+              <span class="badge badge-{{ 'approved' if log.status == 'COMPLETED' else 'pending' if log.status == 'PARTIAL' else 'rejected' }}">
+                {{ log.status }}
+              </span>
+            </td>
+            <td style="font-size:11px;color:var(--grey);">
+              {% set actor = namespace(name='System') %}
+              {% if log.executed_by %}
+                {% set u = AdminUser.query.get(log.executed_by) if AdminUser else none %}
+                {{ u.full_name if u else 'ID:' ~ log.executed_by }}
+              {% else %}
+                System
+              {% endif %}
+            </td>
+          </tr>
+          {% if log.errors %}
+          <tr>
+            <td colspan="8" style="padding:0 12px 10px;border-top:none;">
+              <button type="button" class="btn btn-secondary btn-sm"
+                      style="font-size:10px;padding:3px 10px;"
+                      onclick="toggleErr('err-{{ log.id }}')">
+                &#9888; Show errors ({{ log.records_err }})
+              </button>
+              <div class="err-box" id="err-{{ log.id }}">{{ log.errors }}</div>
+            </td>
+          </tr>
+          {% endif %}
+          {% else %}
+          <tr>
+            <td colspan="8" style="text-align:center;color:var(--grey);padding:40px;">
+              No migration operations yet. Download a template above to get started.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /page-content -->
+
+<script>
+function showFile(input, nameId) {
+  const el = document.getElementById(nameId);
+  if (input.files && input.files[0]) {
+    el.textContent = '📎 ' + input.files[0].name;
+    el.style.display = 'block';
+  }
+}
+
+function toggleErr(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' || el.style.display === '' ? 'block' : 'none';
+}
+
+// Drag & drop highlight
+document.querySelectorAll('.drop-zone').forEach(zone => {
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', ()  => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop',     e  => { e.preventDefault(); zone.classList.remove('drag-over'); });
+});
+</script>
+{% endblock %}

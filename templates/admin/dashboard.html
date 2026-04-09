@@ -16,23 +16,23 @@
   <!-- KPI CARDS -->
   <div class="grid grid-4 mb-2">
     <div class="card" style="border-top:2px solid var(--gold);">
-      <div class="card-title">Total AUM</div>
-      <div class="stat-value gold-value">GHS {{ "{:,.0f}".format(aum) }}</div>
-      <div class="stat-sub">Funds Under Management</div>
+      <div class="card-title">Total AUM (GHS)</div>
+      <div class="stat-value gold-value">{{ "{:,.0f}".format(total_aum) }}</div>
+      <div class="stat-sub">Investments + Cash</div>
     </div>
     <div class="card" style="border-top:2px solid #27AE60;">
       <div class="card-title">Active Accounts</div>
       <div class="stat-value">{{ total_accounts }}</div>
       <div class="stat-sub">
-        {% if pending_accounts %}<span style="color:var(--gold);">{{ pending_accounts }} pending</span>
+        {% if pending_accounts %}<a href="{{ url_for('admin.accounts') }}?status=PENDING" style="color:var(--gold);text-decoration:none;">{{ pending_accounts }} pending approval</a>
         {% else %}All approved{% endif %}
       </div>
     </div>
     <div class="card" style="border-top:2px solid #3498DB;">
-      <div class="card-title">Total Investments</div>
+      <div class="card-title">Investments</div>
       <div class="stat-value">{{ total_investments }}</div>
       <div class="stat-sub">
-        {% if pending_investments %}<span style="color:var(--gold);">{{ pending_investments }} pending approval</span>
+        {% if pending_investments %}<a href="{{ url_for('admin.investments') }}?status=PENDING" style="color:var(--gold);text-decoration:none;">{{ pending_investments }} pending approval</a>
         {% else %}All approved{% endif %}
       </div>
     </div>
@@ -42,6 +42,48 @@
       <div class="stat-sub" id="live-time" style="color:var(--gold);font-family:var(--font-mono);font-size:13px;"></div>
     </div>
   </div>
+
+  {# ── Pending items alert row ── #}
+  {% if pending_transactions or pending_requests %}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.2rem;">
+    {% if pending_transactions %}
+    <div class="card" style="border-left:3px solid var(--gold);padding:1rem 1.2rem;">
+      <div style="display:flex;align-items:center;gap:.7rem;">
+        <span style="font-size:1.6rem;">💳</span>
+        <div>
+          <div style="font-size:1.4rem;font-weight:700;color:var(--gold);">{{ pending_transactions }}</div>
+          <div style="font-size:11px;color:var(--grey);">Transaction{{ 's' if pending_transactions != 1 }} pending approval</div>
+        </div>
+        <a href="{{ url_for('admin.transactions') }}?status=PENDING" class="btn btn-secondary btn-sm" style="margin-left:auto;">Review →</a>
+      </div>
+    </div>
+    {% endif %}
+    {% if pending_requests %}
+    <div class="card" style="border-left:3px solid #E67E22;padding:1rem 1.2rem;">
+      <div style="display:flex;align-items:center;gap:.7rem;">
+        <span style="font-size:1.6rem;">📬</span>
+        <div>
+          <div style="font-size:1.4rem;font-weight:700;color:#E67E22;">{{ pending_requests }}</div>
+          <div style="font-size:11px;color:var(--grey);">Client request{{ 's' if pending_requests != 1 }} awaiting action</div>
+        </div>
+        <a href="{{ url_for('admin.client_requests') }}?status=PENDING" class="btn btn-secondary btn-sm" style="margin-left:auto;">Review →</a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ── FX Rates strip ── #}
+  {% if fx %}
+  <div style="background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin-bottom:1.2rem;font-size:11px;color:var(--grey);display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center;">
+    <span style="color:var(--gold);font-weight:600;">Live FX (1 unit → GHS):</span>
+    {% for ccy, info in fx.items() %}{% if ccy != 'GHS' %}
+    <span><strong style="color:var(--white);">{{ ccy }}</strong> {{ "{:,.4f}".format(info.rate) }}
+    <span style="color:rgba(255,255,255,0.25);">· {{ info.updated }}</span></span>
+    {% endif %}{% endfor %}
+    <a href="{{ url_for('admin.refresh_market_data') }}" style="margin-left:auto;color:var(--gold);font-size:10px;">↻ Refresh</a>
+  </div>
+  {% endif %}
 
   <div class="grid grid-2 mb-2">
     <!-- AUM BREAKDOWN CHART -->
@@ -85,7 +127,7 @@
       </div>
       <div class="card">
         <div class="card-title" style="margin-bottom:0.8rem;">Pending Approvals</div>
-        {% if pending_accounts or pending_investments %}
+        {% if pending_accounts or pending_investments or pending_transactions or pending_requests %}
         <div style="display:flex;flex-direction:column;gap:8px;">
           {% if pending_accounts %}
           <a href="{{ url_for('admin.accounts') }}?status=PENDING" style="text-decoration:none;display:flex;align-items:center;gap:8px;">
@@ -97,6 +139,18 @@
           <a href="{{ url_for('admin.investments') }}?status=PENDING" style="text-decoration:none;display:flex;align-items:center;gap:8px;">
             <span class="badge badge-pending">{{ pending_investments }}</span>
             <span style="font-size:12px;">Investments awaiting approval</span>
+          </a>
+          {% endif %}
+          {% if pending_transactions %}
+          <a href="{{ url_for('admin.transactions') }}?status=PENDING" style="text-decoration:none;display:flex;align-items:center;gap:8px;">
+            <span class="badge badge-pending">{{ pending_transactions }}</span>
+            <span style="font-size:12px;">Transactions awaiting approval</span>
+          </a>
+          {% endif %}
+          {% if pending_requests %}
+          <a href="{{ url_for('admin.client_requests') }}?status=PENDING" style="text-decoration:none;display:flex;align-items:center;gap:8px;">
+            <span class="badge" style="background:rgba(230,126,34,0.2);color:#E67E22;">{{ pending_requests }}</span>
+            <span style="font-size:12px;">Client requests awaiting action</span>
           </a>
           {% endif %}
         </div>

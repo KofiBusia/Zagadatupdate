@@ -10,9 +10,30 @@
       </p>
     </div>
     <div class="flex gap-1">
-      <a href="{{ url_for('reports.pvr', account_number=acc.account_number) }}" target="_blank" class="btn btn-secondary btn-sm">📄 GHS Report</a>
-      <a href="{{ url_for('reports.pvr', account_number=acc.account_number, currency='USD') }}" target="_blank" class="btn btn-secondary btn-sm">📄 USD</a>
-      <a href="{{ url_for('reports.pvr', account_number=acc.account_number) }}?download=1" class="btn btn-primary btn-sm">↓ Download PDF</a>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <select id="report-currency"
+                style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                       color:var(--white);padding:5px 10px;font-size:11px;outline:none;">
+          <option value="GHS">GHS</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="NGN">NGN</option>
+          <option value="CNY">CNY</option>
+        </select>
+        <button onclick="openPVR('view')" class="btn btn-secondary btn-sm">📄 View Report</button>
+        <button onclick="openPVR('dl')"   class="btn btn-primary btn-sm">↓ Download PDF</button>
+        <select id="stmt-currency"
+                style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                       color:var(--white);padding:5px 10px;font-size:11px;outline:none;">
+          <option value="GHS">GHS</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="NGN">NGN</option>
+        </select>
+        <button onclick="openStmt()" class="btn btn-secondary btn-sm">📋 Statement</button>
+      </div>
     </div>
   </div>
 
@@ -21,17 +42,22 @@
     <div class="card" style="border-top:2px solid var(--gold);">
       <div class="card-title">Total Portfolio</div>
       <div class="stat-value gold-value">{{ "{:,.2f}".format(portfolio_value) }}</div>
-      <div class="stat-sub">{{ acc.base_currency }}</div>
+      <div class="stat-sub">GHS · Approved only</div>
     </div>
-    <div class="card">
-      <div class="card-title">Investments</div>
-      <div class="stat-value">{{ "{:,.2f}".format(total_value) }}</div>
-      <div class="stat-sub">{{ investments|length }} holdings</div>
+    <div class="card" style="border-top:2px solid var(--green);">
+      <div class="card-title">Investments (MtM)</div>
+      <div class="stat-value" style="color:var(--green);">{{ "{:,.2f}".format(total_value) }}</div>
+      <div class="stat-sub">{{ investments|length }} approved holding{{ 's' if investments|length != 1 }}</div>
     </div>
-    <div class="card">
-      <div class="card-title">Cash Balance</div>
-      <div class="stat-value">{{ "{:,.2f}".format(cash) }}</div>
-      <div class="stat-sub">Available for investment</div>
+    <div class="card" style="border-top:2px solid #3498DB;">
+      <div class="card-title">Available Cash</div>
+      <div class="stat-value" style="color:#3498DB;">{{ "{:,.2f}".format(cash) }}</div>
+      <div class="stat-sub">
+        GHS · Available to invest
+        {% if acc.pending_deposits > 0 %}
+        <br><span style="color:var(--gold);font-size:10px;">+ {{ "{:,.2f}".format(acc.pending_deposits) }} pending</span>
+        {% endif %}
+      </div>
     </div>
     <div class="card">
       <div class="card-title">Risk Profile</div>
@@ -39,6 +65,37 @@
       <div class="stat-sub">{{ acc.investment_objective or '—' }}</div>
     </div>
   </div>
+
+  {# ── Security login alert flash ── #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+  {% if cat == 'login_security' %}
+  <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.3);border-radius:8px;padding:12px 16px;margin-bottom:1rem;display:flex;align-items:flex-start;gap:10px;">
+    <span style="font-size:18px;line-height:1;">🔐</span>
+    <div style="font-size:12px;color:var(--white);line-height:1.7;">{{ msg|safe }}</div>
+    <button onclick="this.parentElement.style.display='none'" style="margin-left:auto;background:none;border:none;color:var(--grey);cursor:pointer;font-size:16px;line-height:1;">✕</button>
+  </div>
+  {% elif cat == 'success' %}
+  <div class="alert alert-success mb-2">✓ {{ msg|safe }}</div>
+  {% elif cat == 'error' %}
+  <div class="alert alert-danger mb-2">⚠ {{ msg|safe }}</div>
+  {% endif %}
+  {% endfor %}
+  {% endwith %}
+
+  {# ── Pending requests from this client ── #}
+  {% set pending_reqs = requests|selectattr('status','eq','PENDING')|list %}
+  {% if pending_reqs %}
+  <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.25);border-radius:8px;
+              padding:12px 16px;margin-bottom:1rem;font-size:12px;color:var(--grey);">
+    <strong style="color:var(--gold);">⏳ {{ pending_reqs|length }} pending request{{ 's' if pending_reqs|length != 1 }}</strong>
+    — awaiting admin review.
+    {% for r in pending_reqs %}
+    <span class="badge badge-pending" style="margin-left:4px;">{{ r.request_type }}</span>
+    {% endfor %}
+    <a href="{{ url_for('user.requests_page') }}" style="color:var(--gold);margin-left:.5rem;">View →</a>
+  </div>
+  {% endif %}
 
   {% if not acc.signature_path or not acc.id_document_path %}
   <div class="alert alert-info mb-2">
@@ -165,3 +222,16 @@
   </div>
 </div>
 {% endblock %}
+<script>
+function openPVR(mode) {
+  const cur = document.getElementById('report-currency')?.value || 'GHS';
+  const base = '{{ url_for("reports.pvr", account_number=acc.account_number) }}';
+  const url = base + '?currency=' + cur + (mode === 'dl' ? '&download=1' : '');
+  window.open(url, '_blank');
+}
+function openStmt() {
+  const cur = document.getElementById('stmt-currency')?.value || 'GHS';
+  const base = '{{ url_for("reports.statement", account_number=acc.account_number) }}';
+  window.open(base + '?currency=' + cur, '_blank');
+}
+</script>

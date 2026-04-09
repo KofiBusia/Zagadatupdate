@@ -505,6 +505,7 @@ nav.topnav {
         <a href="{{ url_for('reports.menu') }}">Report Centre</a>
         <a href="{{ url_for('reports.global_report') }}" target="_blank">Global AUM Report</a>
         <a href="{{ url_for('reports.fees_report') }}" target="_blank">Fees Report</a>
+        <a href="{{ url_for('sec.index') }}">SEC Regulatory Report</a>
       </div>
     </div>
     {% if current_user.has_permission('approve_account') %}
@@ -525,7 +526,7 @@ nav.topnav {
         <a href="{{ url_for('admin.manage_stocks') }}">Stock Prices</a>
         <a href="{{ url_for('admin.manage_fx') }}">FX Rates</a>
         {% if current_user.is_super_admin %}
-        <a href="{{ url_for('admin.migration') }}">Data Migration</a>
+        <a href="{{ url_for('migration.index') }}">Data Migration Portal</a>
         {% endif %}
         <a href="#" onclick="refreshMarket(event)">↻ Refresh Market Data</a>
       </div>
@@ -569,9 +570,17 @@ nav.topnav {
 {% if messages %}
 <div style="padding: 0 2rem; margin-top: 1rem;">
 {% for category, message in messages %}
-<div class="alert alert-{{ 'success' if category == 'success' else 'error' if category == 'error' else 'info' }}">
-  {{ '✓' if category == 'success' else '⚠' }} {{ message }}
+{% if category == 'login_security' %}
+<div class="alert" id="sec-banner" style="background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.3);color:var(--gold);position:relative;padding-right:3rem;display:flex;align-items:flex-start;gap:.7rem;">
+  <span style="font-size:1.1rem;flex-shrink:0;">🛡</span>
+  <span style="font-size:12px;line-height:1.7;">{{ message|safe }}</span>
+  <button onclick="this.parentElement.style.display='none'" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--gold);font-size:18px;cursor:pointer;opacity:.7;padding:0;">✕</button>
 </div>
+{% else %}
+<div class="alert alert-{{ 'success' if category == 'success' else 'error' if category == 'error' else 'info' }}">
+  {{ '✓' if category == 'success' else '⚠' }} {{ message|safe }}
+</div>
+{% endif %}
 {% endfor %}
 </div>
 {% endif %}

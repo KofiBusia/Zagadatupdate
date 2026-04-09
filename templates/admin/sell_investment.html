@@ -1,0 +1,412 @@
+{% extends 'base.html' %}
+{% block title %}Sell / Redeem — {{ inv.security_name or inv.asset_class.replace('_',' ') }} — Zagadat Capital{% endblock %}
+{% block extra_css %}
+<style>
+.inv-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1rem;}
+.inv-kpi-card{padding:.8rem 1rem;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:7px;}
+.inv-kpi-label{font-size:10px;color:var(--grey);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;}
+.inv-kpi-value{font-size:1.1rem;font-weight:700;}
+.sell-mode-toggle{display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:1.2rem;}
+.smt-btn{flex:1;padding:10px;background:transparent;border:none;color:var(--grey);font-size:12px;font-family:var(--font-body);font-weight:500;cursor:pointer;transition:all .2s;letter-spacing:.5px;}
+.smt-btn.active{background:var(--gold);color:var(--black);font-weight:700;}
+.proceeds-bar{background:rgba(39,174,96,.08);border:1px solid rgba(39,174,96,.25);border-radius:7px;padding:12px 16px;margin-top:.8rem;font-size:12px;line-height:1.8;}
+.proceeds-row{display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px;}
+.proceeds-label{color:var(--grey);}
+.proceeds-value{font-weight:600;color:var(--white);font-family:var(--font-mono);}
+.proceeds-value.highlight{color:var(--gold);font-size:14px;}
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-content">
+  <div class="page-header">
+    <div>
+      <h1>Sell / Redeem Investment</h1>
+      <p>{{ acc.account_number }} · {{ acc.full_name }}</p>
+    </div>
+    <a href="{{ url_for('admin.view_account', acc_id=acc.id) }}" class="btn btn-secondary">← Back to Account</a>
+  </div>
+
+  {# ── Investment KPI summary ── #}
+  <div class="card mb-2" style="border-left:3px solid var(--gold);">
+    <div class="card-title" style="margin-bottom:.8rem;">Investment Being Sold / Redeemed</div>
+    <div class="inv-kpi">
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Asset Class</div>
+        <div class="inv-kpi-value" style="color:var(--gold);font-size:.9rem;">
+          {{ inv.asset_class.replace('_',' ') }}
+        </div>
+      </div>
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Security / Fund</div>
+        <div class="inv-kpi-value" style="font-size:.9rem;">{{ inv.security_name or inv.issuer or '—' }}</div>
+      </div>
+      {% if inv.asset_class in ['GSE_EQUITIES','GLOBAL_EQUITIES','MUTUAL_FUNDS'] %}
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Shares / Units Held</div>
+        <div class="inv-kpi-value" style="color:var(--white);">
+          {{ "{:,.4f}".format(inv.quantity or 0) }}
+        </div>
+      </div>
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Purchase Price</div>
+        <div class="inv-kpi-value">
+          {{ inv.currency }} {{ "{:,.4f}".format(inv.unit_cost or 0) }}
+        </div>
+      </div>
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Current Price</div>
+        <div class="inv-kpi-value" style="color:var(--green);">
+          {{ inv.currency }} {{ "{:,.4f}".format(inv.current_price or inv.unit_cost or 0) }}
+        </div>
+      </div>
+      {% else %}
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Original Cost</div>
+        <div class="inv-kpi-value">{{ inv.currency }} {{ "{:,.2f}".format(inv.total_cost or 0) }}</div>
+      </div>
+      {% if inv.face_value %}
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Face Value</div>
+        <div class="inv-kpi-value">{{ inv.currency }} {{ "{:,.2f}".format(inv.face_value) }}</div>
+      </div>
+      {% endif %}
+      {% if inv.maturity_date %}
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Maturity Date</div>
+        <div class="inv-kpi-value" style="font-size:.85rem;">{{ inv.maturity_date.strftime('%d %b %Y') }}</div>
+      </div>
+      {% endif %}
+      {% endif %}
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Current Mkt Value</div>
+        <div class="inv-kpi-value" style="color:var(--green);">
+          GHS {{ "{:,.2f}".format(inv.computed_mkt_value) }}
+        </div>
+      </div>
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Unrealised Gain/Loss</div>
+        {% set gain = inv.computed_mkt_value - (inv.total_cost or 0) %}
+        <div class="inv-kpi-value" style="color:{{ 'var(--green)' if gain >= 0 else 'var(--red)' }};">
+          GHS {{ "{:,.2f}".format(gain) }}
+        </div>
+      </div>
+      <div class="inv-kpi-card">
+        <div class="inv-kpi-label">Account Cash</div>
+        <div class="inv-kpi-value" style="color:var(--gold);">GHS {{ "{:,.2f}".format(acc.cash_balance) }}</div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Sell form ── #}
+  <div class="card">
+    <div class="card-title" style="margin-bottom:1rem;">Enter Sale / Redemption Details</div>
+
+    {% if inv.asset_class in ['GSE_EQUITIES','GLOBAL_EQUITIES','MUTUAL_FUNDS'] %}
+    {# ── QUANTITY-BASED SELL (Equities & Mutual Funds) ── #}
+    <div style="background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.25);border-radius:7px;
+                padding:10px 16px;font-size:12px;color:var(--grey);margin-bottom:1.2rem;line-height:1.7;">
+      <strong style="color:#3498DB;">📊 Equity / Fund Sale</strong> — Enter the number of shares/units to sell.
+      You can sell all or part of the holding.
+      Remaining units will stay on the account as an active position.
+      Cash will be credited with <em>Quantity × Sale Price</em>.
+    </div>
+
+    <form method="POST" id="sell-form">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Sale Date *</label>
+          <input type="date" name="sell_date" value="{{ today.isoformat() }}" required>
+        </div>
+        <div class="form-group">
+          <label>Proceeds Currency *</label>
+          <select name="currency" id="sell-currency" onchange="updateCalc()">
+            {% for code in ['GHS','USD','EUR','GBP','NGN'] %}
+            <option value="{{ code }}" {{ 'selected' if (inv.currency or 'GHS')==code }}>{{ code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Quantity to Sell *</label>
+          <input type="number" step="0.0001" min="0.0001"
+                 max="{{ inv.quantity or 0 }}"
+                 name="sell_quantity" id="sell-qty"
+                 placeholder="0.0000"
+                 oninput="updateCalc()" required>
+          <span style="font-size:10px;color:var(--grey);">
+            Max: {{ "{:,.4f}".format(inv.quantity or 0) }} units/shares held
+          </span>
+        </div>
+        <div class="form-group">
+          <label>Sale Price per Unit *</label>
+          <input type="number" step="0.0001" min="0.0001"
+                 name="sell_price" id="sell-price"
+                 value="{{ "{:.4f}".format(inv.current_price or inv.unit_cost or 0) }}"
+                 oninput="updateCalc()" required>
+          <span style="font-size:10px;color:var(--grey);">
+            Current mkt price: {{ inv.currency }} {{ "{:,.4f}".format(inv.current_price or 0) }}
+          </span>
+        </div>
+        <div class="form-group">
+          <label>Reference Number</label>
+          <input type="text" name="reference" value="SELL-{{ '%06d' % inv.id }}">
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <input type="text" name="description"
+                 value="Sale: {{ inv.security_name or inv.asset_class }} ({{ inv.symbol or '' }})">
+        </div>
+      </div>
+
+      {# ── Live proceeds calculator ── #}
+      <div class="proceeds-bar" id="proceeds-bar" style="display:none;">
+        <div class="proceeds-row">
+          <span class="proceeds-label">Units Being Sold</span>
+          <span class="proceeds-value" id="disp-qty">—</span>
+        </div>
+        <div class="proceeds-row">
+          <span class="proceeds-label">Sale Price</span>
+          <span class="proceeds-value" id="disp-price">—</span>
+        </div>
+        <div class="proceeds-row">
+          <span class="proceeds-label">Gross Proceeds</span>
+          <span class="proceeds-value highlight" id="disp-proceeds">—</span>
+        </div>
+        <div class="proceeds-row">
+          <span class="proceeds-label">GHS Equivalent (est.)</span>
+          <span class="proceeds-value" id="disp-ghs">—</span>
+        </div>
+        <hr style="border-color:rgba(255,255,255,.1);margin:6px 0;">
+        <div class="proceeds-row">
+          <span class="proceeds-label">Units Remaining After Sale</span>
+          <span class="proceeds-value" id="disp-remaining">—</span>
+        </div>
+        <div class="proceeds-row">
+          <span class="proceeds-label">Remaining Position Value (est.)</span>
+          <span class="proceeds-value" id="disp-rem-val">—</span>
+        </div>
+        <div class="proceeds-row">
+          <span class="proceeds-label">Realised Gain / Loss</span>
+          <span class="proceeds-value" id="disp-gain">—</span>
+        </div>
+        <div class="proceeds-row">
+          <span class="proceeds-label">Sale Type</span>
+          <span class="proceeds-value" id="disp-type" style="color:var(--gold);">—</span>
+        </div>
+      </div>
+
+      <div style="background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.25);
+                  border-radius:7px;padding:10px 14px;font-size:12px;color:var(--grey);
+                  line-height:1.8;margin:1rem 0;">
+        <strong style="color:#3498DB;">ℹ Workflow:</strong>
+        Super Admin: proceeds credited to cash immediately.
+        Other staff: transaction is PENDING until an approver signs off.
+        For partial sells, the remaining position stays on the account as an active holding.
+      </div>
+
+      <div style="display:flex;gap:1rem;">
+        <a href="{{ url_for('admin.view_account', acc_id=acc.id) }}"
+           class="btn btn-secondary" style="text-decoration:none;text-align:center;">Cancel</a>
+        <button type="button" class="btn btn-primary" style="flex:1;"
+                onclick="confirmSell()">
+          ✓ Record Sale
+        </button>
+      </div>
+    </form>
+
+    {% else %}
+    {# ── AMOUNT-BASED SELL (Bonds, MM, T-Bills, PE, PD) ── #}
+    <div style="background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.25);border-radius:7px;
+                padding:10px 16px;font-size:12px;color:var(--grey);margin-bottom:1.2rem;line-height:1.7;">
+      <strong style="color:#3498DB;">💰 Fixed Income / Alternative Redemption</strong> —
+      Enter the total proceeds received on sale, maturity, or redemption.
+      This amount will be credited to the client's cash balance.
+    </div>
+
+    <form method="POST" id="sell-form">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Sale / Redemption Date *</label>
+          <input type="date" name="sell_date" value="{{ today.isoformat() }}" required>
+        </div>
+        <div class="form-group">
+          <label>Proceeds Currency *</label>
+          <select name="currency" id="sell-currency" onchange="updateAmtCalc()">
+            {% for code in ['GHS','USD','EUR','GBP','NGN'] %}
+            <option value="{{ code }}" {{ 'selected' if (inv.currency or 'GHS')==code }}>{{ code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Total Proceeds *</label>
+          <input type="number" step="0.01" min="0.01"
+                 name="sell_amount" id="sell-amount"
+                 value="{{ "{:.2f}".format(inv.computed_mkt_value) }}"
+                 oninput="updateAmtCalc()" required>
+          <span style="font-size:10px;color:var(--grey);">
+            Pre-filled with current market value — adjust to actual redemption amount
+          </span>
+        </div>
+        <div class="form-group">
+          <label>GHS Equivalent (est.)</label>
+          <input type="text" id="amt-ghs" readonly
+                 style="background:rgba(39,174,96,.06);border-color:rgba(39,174,96,.3);color:var(--green);"
+                 placeholder="Auto-calculated">
+        </div>
+        <div class="form-group span-full">
+          <label>Description</label>
+          <input type="text" name="description"
+                 value="{% if inv.asset_class == 'GOVT_SECURITIES' %}Redemption: {{ inv.security_name or inv.sub_type or 'T-Bill' }}{% elif inv.asset_class in ['BONDS','EUROBONDS'] %}Sale: {{ inv.security_name or 'Bond' }} ({{ inv.issuer or '' }}){% elif inv.asset_class == 'MONEY_MARKET' %}Maturity: {{ inv.security_name or inv.issuer or 'Fixed Deposit' }}{% elif inv.asset_class == 'PRIVATE_EQUITY' %}Divestment: {{ inv.security_name or '' }}{% elif inv.asset_class == 'PRIVATE_DEBT' %}Repayment: {{ inv.security_name or inv.issuer or 'Loan' }}{% else %}Redemption: {{ inv.security_name or inv.asset_class }}{% endif %}">
+        </div>
+        <div class="form-group">
+          <label>Reference Number</label>
+          <input type="text" name="reference" value="SELL-{{ '%06d' % inv.id }}">
+        </div>
+      </div>
+
+      {# ── P&L summary ── #}
+      <div class="proceeds-bar">
+        <div class="proceeds-row">
+          <span class="proceeds-label">Original Cost</span>
+          <span class="proceeds-value">{{ inv.currency }} {{ "{:,.2f}".format(inv.total_cost or 0) }}</span>
+        </div>
+        <div class="proceeds-row">
+          <span class="proceeds-label">Current Market Value (GHS)</span>
+          <span class="proceeds-value">{{ "{:,.2f}".format(inv.computed_mkt_value) }}</span>
+        </div>
+        {% if inv.maturity_date %}
+        <div class="proceeds-row">
+          <span class="proceeds-label">Maturity / Redemption Date</span>
+          <span class="proceeds-value">{{ inv.maturity_date.strftime('%d %b %Y') }}</span>
+        </div>
+        {% if inv.days_to_maturity is not none %}
+        <div class="proceeds-row">
+          <span class="proceeds-label">Days to Maturity</span>
+          <span class="proceeds-value">{{ inv.days_to_maturity }} days</span>
+        </div>
+        {% endif %}
+        {% endif %}
+        <hr style="border-color:rgba(255,255,255,.1);margin:6px 0;">
+        <div class="proceeds-row">
+          <span class="proceeds-label">Estimated Realised Gain / Loss</span>
+          {% set gain = inv.computed_mkt_value - (inv.total_cost or 0) %}
+          <span class="proceeds-value" style="color:{{ 'var(--green)' if gain >= 0 else 'var(--red)' }};">
+            GHS {{ "{:,.2f}".format(gain) }}
+          </span>
+        </div>
+      </div>
+
+      <div style="background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.25);
+                  border-radius:7px;padding:10px 14px;font-size:12px;color:var(--grey);
+                  line-height:1.8;margin:1rem 0;">
+        <strong style="color:#3498DB;">ℹ Workflow:</strong>
+        Super Admin: proceeds credited to cash and investment marked SOLD immediately.
+        Other staff: transaction is PENDING until an approver signs off.
+      </div>
+
+      <div style="display:flex;gap:1rem;">
+        <a href="{{ url_for('admin.view_account', acc_id=acc.id) }}"
+           class="btn btn-secondary" style="text-decoration:none;text-align:center;">Cancel</a>
+        <button type="button" class="btn btn-primary" style="flex:1;"
+                onclick="confirmAmtSell()">
+          ✓ Record Sale / Redemption
+        </button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+const HELD_QTY    = {{ inv.quantity or 0 }};
+const UNIT_COST   = {{ inv.unit_cost or 0 }};
+const CURR_PRICE  = {{ inv.current_price or inv.unit_cost or 0 }};
+const INV_CCY     = '{{ inv.currency or "GHS" }}';
+let FX_RATES = { GHS: 1 };
+
+// Fetch live FX rates
+fetch('/api/fx').then(r=>r.json()).then(d=>{
+  Object.keys(d).forEach(k=>{ if(d[k] && d[k].rate) FX_RATES[k] = d[k].rate; });
+  updateCalc();
+  updateAmtCalc();
+}).catch(()=>{});
+
+function numFmt(n, d=2) {
+  return (n||0).toLocaleString('en-GH', {minimumFractionDigits:d, maximumFractionDigits:d});
+}
+
+// ── Equity / MF quantity-based calculator ─────────────────────────────────
+function updateCalc() {
+  const qty   = parseFloat(document.getElementById('sell-qty')?.value || 0);
+  const price = parseFloat(document.getElementById('sell-price')?.value || 0);
+  const ccy   = document.getElementById('sell-currency')?.value || 'GHS';
+  const bar   = document.getElementById('proceeds-bar');
+  if (!bar) return;
+
+  if (qty <= 0 || price <= 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+
+  const proceeds  = qty * price;
+  const ghsRate   = FX_RATES[ccy] || 1;
+  const proceedsGHS = proceeds * ghsRate;
+  const remaining = Math.max(0, HELD_QTY - qty);
+  const remVal    = remaining * CURR_PRICE;
+  const costBasis = qty * UNIT_COST;
+  const realGain  = proceeds - costBasis;
+  const isFull    = remaining < 0.0001;
+
+  document.getElementById('disp-qty').textContent    = numFmt(qty, 4) + ' units';
+  document.getElementById('disp-price').textContent  = ccy + ' ' + numFmt(price, 4);
+  document.getElementById('disp-proceeds').textContent = ccy + ' ' + numFmt(proceeds);
+  document.getElementById('disp-ghs').textContent    = ccy !== 'GHS'
+    ? `GHS ${numFmt(proceedsGHS)} (@ ${ghsRate.toFixed(4)} per ${ccy})`
+    : `GHS ${numFmt(proceedsGHS)}`;
+  document.getElementById('disp-remaining').textContent = numFmt(remaining, 4) + ' units';
+  document.getElementById('disp-rem-val').textContent = INV_CCY + ' ' + numFmt(remVal);
+  const gainEl = document.getElementById('disp-gain');
+  gainEl.textContent = ccy + ' ' + numFmt(realGain);
+  gainEl.style.color = realGain >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('disp-type').textContent = isFull ? '🔴 FULL SELL' : '🟡 PARTIAL SELL';
+}
+
+function confirmSell() {
+  const qty   = parseFloat(document.getElementById('sell-qty')?.value || 0);
+  const price = parseFloat(document.getElementById('sell-price')?.value || 0);
+  if (qty <= 0) { alert('Please enter a valid quantity.'); return; }
+  if (qty > HELD_QTY) { alert(`Cannot sell ${qty} units — only ${HELD_QTY.toFixed(4)} held.`); return; }
+  if (price <= 0) { alert('Please enter a valid sale price.'); return; }
+  const proceeds = qty * price;
+  const remaining = Math.max(0, HELD_QTY - qty);
+  const isFull = remaining < 0.0001;
+  const msg = isFull
+    ? `Record FULL sale of all ${HELD_QTY.toFixed(4)} units at ${price.toFixed(4)} for total proceeds of ${proceeds.toFixed(2)}?\n\nThe investment will be marked SOLD.`
+    : `Record PARTIAL sale of ${qty.toFixed(4)} units at ${price.toFixed(4)} for proceeds of ${proceeds.toFixed(2)}?\n\n${remaining.toFixed(4)} units will remain on the account.`;
+  if (confirm(msg)) document.getElementById('sell-form').submit();
+}
+
+// ── Amount-based calculator ────────────────────────────────────────────────
+function updateAmtCalc() {
+  const amt = parseFloat(document.getElementById('sell-amount')?.value || 0);
+  const ccy = document.getElementById('sell-currency')?.value || 'GHS';
+  const el  = document.getElementById('amt-ghs');
+  if (!el) return;
+  if (!amt) { el.value = ''; return; }
+  const rate = FX_RATES[ccy] || 1;
+  const ghs  = amt * rate;
+  el.value = ccy === 'GHS' ? `GHS ${numFmt(ghs)}` : `GHS ${numFmt(ghs)} (@ ${rate.toFixed(4)} per ${ccy})`;
+}
+
+function confirmAmtSell() {
+  const amt = parseFloat(document.getElementById('sell-amount')?.value || 0);
+  if (amt <= 0) { alert('Please enter a valid proceeds amount.'); return; }
+  if (confirm(`Record redemption / sale for ${document.getElementById('sell-currency').value} ${amt.toLocaleString('en-GH', {minimumFractionDigits:2})}?\n\nThis will be credited to the client's cash balance.`)) {
+    document.getElementById('sell-form').submit();
+  }
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+  updateCalc();
+  updateAmtCalc();
+});
+</script>
+{% endblock %}

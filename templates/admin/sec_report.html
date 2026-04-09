@@ -1,0 +1,1033 @@
+{% extends 'base.html' %}
+{% block title %}SEC Report — {{ report.label }} — Zagadat Capital{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── SEC MODULE STYLES ─────────────────────────────────────────────────────── */
+.sec-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.sec-period-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.sec-period-bar select,
+.sec-period-bar input {
+  background: #1A1A2E;
+  border: 1px solid rgba(201,168,76,0.35);
+  border-radius: 6px;
+  color: #F5F5F0;
+  padding: 7px 12px;
+  font-size: 13px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23C9A84C' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+  cursor: pointer;
+}
+.sec-period-bar select option {
+  background: #1A1A2E;
+  color: #F5F5F0;
+}
+.sec-period-bar select option:checked,
+.sec-period-bar select option:hover {
+  background: #C9A84C;
+  color: #0A0A0A;
+}
+.sec-period-bar select:focus,
+.sec-period-bar input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(201,168,76,0.15);
+}
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.status-draft     { background: rgba(201,168,76,0.15); color: var(--gold);  border: 1px solid rgba(201,168,76,0.3); }
+.status-submitted { background: rgba(39,174,96,0.15);  color: var(--green); border: 1px solid rgba(39,174,96,0.3); }
+
+/* ── TABS ─────────────────────────────────────────────────────────────────── */
+.sec-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid rgba(201,168,76,0.2);
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+}
+.sec-tab {
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--grey);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  white-space: nowrap;
+  transition: color 0.2s, border-color 0.2s;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  outline: none;
+}
+.sec-tab:hover  { color: var(--white); }
+.sec-tab.active { color: var(--gold);  border-bottom-color: var(--gold); }
+.sec-panel      { display: none; }
+.sec-panel.active { display: block; }
+
+/* ── EDITABLE TABLE ───────────────────────────────────────────────────────── */
+.sec-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.sec-table th {
+  background: #1A1A2E;
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 10px 10px;
+  text-align: center;
+  border: 1px solid rgba(201,168,76,0.15);
+  white-space: nowrap;
+}
+.sec-table th:first-child { text-align: left; }
+.sec-table td {
+  border: 1px solid rgba(255,255,255,0.05);
+  padding: 0;
+  vertical-align: middle;
+}
+.sec-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+.sec-table tr:hover td           { background: rgba(201,168,76,0.04); }
+.sec-table tr.total-row td {
+  background: #1A1A2E !important;
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+.sec-table tr.total-row td input { display: none !important; }
+
+.row-label {
+  padding: 8px 12px;
+  color: var(--white);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.sec-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--white);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  text-align: right;
+  padding: 8px 10px;
+  outline: none;
+  transition: background 0.15s;
+}
+.sec-input:focus {
+  background: rgba(201,168,76,0.08);
+  color: var(--gold);
+}
+.sec-input.int-input { text-align: center; }
+
+/* ── FORM ROWS (CIS) ──────────────────────────────────────────────────────── */
+.cis-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+.cis-form-grid .form-group { margin: 0; }
+.cis-form-grid label {
+  display: block;
+  font-size: 11px;
+  color: var(--grey);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.cis-form-grid input,
+.cis-form-grid select {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 5px;
+  color: var(--white);
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.cis-form-grid input:focus,
+.cis-form-grid select:focus { border-color: var(--gold); }
+.calc-field {
+  background: rgba(201,168,76,0.06) !important;
+  color: var(--gold) !important;
+  font-weight: 600;
+  cursor: not-allowed;
+}
+.cis-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin-top: 1rem;
+}
+.cis-results-table th {
+  background: #111118;
+  color: var(--gold);
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(201,168,76,0.2);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.cis-results-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--white);
+  vertical-align: top;
+}
+.cis-results-table tr:hover td { background: rgba(255,255,255,0.02); }
+.cis-results-table .num { text-align: right; font-family: var(--font-mono); }
+.cis-results-table .pos { color: var(--green); }
+.cis-results-table .neg { color: var(--red);   }
+.delete-btn {
+  background: rgba(231,76,60,0.12);
+  color: var(--red);
+  border: 1px solid rgba(231,76,60,0.25);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.delete-btn:hover { background: rgba(231,76,60,0.25); }
+.edit-btn {
+  background: rgba(201,168,76,0.1);
+  color: var(--gold);
+  border: 1px solid rgba(201,168,76,0.25);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.edit-btn:hover { background: rgba(201,168,76,0.2); }
+
+/* ── EXPORT BAR ───────────────────────────────────────────────────────────── */
+.export-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.section-save-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.divider-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--grey);
+  margin: 1rem 0 0.5rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-content">
+
+  <!-- ── PAGE HEADER ─────────────────────────────────────────────────────── -->
+  <div class="sec-header">
+    <div>
+      <h1 style="margin-bottom:4px;">SEC Regulatory Report</h1>
+      <p style="color:var(--grey);font-size:13px;">
+        Quarterly regulatory submission to the Securities &amp; Exchange Commission
+      </p>
+    </div>
+    <div class="export-bar">
+      {% if report %}
+      {% if report.status != 'SUBMITTED' %}
+      <form method="POST" action="{{ url_for('sec.refresh', report_id=report.id) }}"
+            title="Re-calculate all tables from live investment data">
+        <button type="submit" class="btn btn-secondary">🔄 Refresh from Investments</button>
+      </form>
+      {% endif %}
+      <a href="{{ url_for('sec.export_pdf', report_id=report.id) }}" target="_blank"
+         class="btn btn-secondary" title="View PDF">📄 View PDF</a>
+      <a href="{{ url_for('sec.export_pdf', report_id=report.id, download='1') }}"
+         class="btn btn-secondary" title="Download PDF">↓ PDF</a>
+      <a href="{{ url_for('sec.export_excel', report_id=report.id) }}"
+         class="btn btn-secondary" title="Download Excel">📊 Excel</a>
+      {% if report.status == 'DRAFT' %}
+      <form method="POST" action="{{ url_for('sec.submit_report', report_id=report.id) }}"
+            onsubmit="return confirm('Submit this report? You will not be able to edit it after submission.')">
+        <button type="submit" class="btn btn-primary">✅ Submit Report</button>
+      </form>
+      {% else %}
+      <form method="POST" action="{{ url_for('sec.reopen_report', report_id=report.id) }}"
+            onsubmit="return confirm('Reopen this report for editing?')">
+        <button type="submit" class="btn btn-secondary">🔓 Reopen</button>
+      </form>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── PERIOD SELECTOR ────────────────────────────────────────────────── -->
+  <div class="card mb-2">
+    <div style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;">
+      <div class="sec-period-bar">
+        <label style="font-size:11px;color:var(--grey);text-transform:uppercase;">Period</label>
+        <form id="period-form" method="GET" action="{{ url_for('sec.index') }}"
+              style="display:flex;align-items:center;gap:0.5rem;">
+          <select name="quarter" onchange="this.form.submit()">
+            {% for q in ['Q1','Q2','Q3','Q4'] %}
+            <option value="{{ q }}" {% if q == quarter %}selected{% endif %}>{{ q }}</option>
+            {% endfor %}
+          </select>
+          <select name="year" onchange="this.form.submit()">
+            {% for y in years %}
+            <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+      {% if report %}
+      <span class="status-badge {% if report.status == 'SUBMITTED' %}status-submitted{% else %}status-draft{% endif %}">
+        {% if report.status == 'SUBMITTED' %}✓ Submitted{% else %}● Draft{% endif %}
+      </span>
+      {% if report.submitted_at %}
+      <span style="font-size:11px;color:var(--grey);">
+        Submitted: {{ report.submitted_at.strftime('%d %b %Y %H:%M') }}
+      </span>
+      {% endif %}
+      <span style="font-size:11px;color:var(--grey);">
+        Last updated: {{ report.updated_at.strftime('%d %b %Y %H:%M') }}
+      </span>
+      {% endif %}
+      <!-- Previous reports quick-jump -->
+      <div style="margin-left:auto;">
+        <select onchange="if(this.value) window.location=this.value"
+                style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:5px;color:var(--grey);padding:6px 10px;font-size:11px;outline:none;">
+          <option value="">— Jump to report —</option>
+          {% for r in all_reports %}
+          <option value="{{ url_for('sec.index', year=r.year, quarter=r.quarter) }}"
+                  {% if r.id == report.id %}selected{% endif %}>
+            {{ r.label }} — {{ r.status }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  {% if report.status == 'SUBMITTED' %}
+  <div style="background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.25);border-radius:8px;padding:10px 16px;margin-bottom:1rem;font-size:12px;color:var(--green);">
+    ✓ This report has been submitted and is read-only. Use <strong>Reopen</strong> to make changes.
+  </div>
+  {% else %}
+  <div style="background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.2);border-radius:8px;padding:10px 16px;margin-bottom:1rem;font-size:12px;color:var(--grey);display:flex;align-items:center;gap:8px;">
+    <span style="color:var(--gold);font-size:16px;">⚡</span>
+    <span>
+      <strong style="color:var(--gold);">Live Data:</strong>
+      Portfolio Holdings, Client Type and Classification are <strong>auto-populated daily</strong>
+      from all approved investments in the system. Last updated:
+      <strong style="color:var(--white);">{{ report.updated_at.strftime('%d %b %Y %H:%M') }}</strong>.
+      Use <strong>🔄 Refresh</strong> to recalculate now, or save manually to override.
+    </span>
+  </div>
+  {% endif %}
+
+  <!-- ── TABS ───────────────────────────────────────────────────────────── -->
+  <div class="sec-tabs">
+    <button class="sec-tab active" onclick="showTab('client-type',   this)">1. Client Type</button>
+    <button class="sec-tab"        onclick="showTab('client-class',  this)">2. Client Classification</button>
+    <button class="sec-tab"        onclick="showTab('portfolio',     this)">3. Portfolio Holdings</button>
+    <button class="sec-tab"        onclick="showTab('cis-inflow',    this)">4. CIS Inflow</button>
+    <button class="sec-tab"        onclick="showTab('cis-outflow',   this)">5. CIS Outflow</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TAB 1: CLIENT TYPE SUMMARY
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div id="panel-client-type" class="sec-panel active">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:0.3rem;">Client Type Summary</div>
+      <p class="divider-label">All values in GHS — edit cells directly and click Save</p>
+
+      {% set ct_map = {} %}
+      {% for row in report.client_type_rows %}
+        {% if ct_map.update({row.client_type: row}) %}{% endif %}
+      {% endfor %}
+
+      <form method="POST" action="{{ url_for('sec.save_client_type', report_id=report.id) }}">
+        <div style="overflow-x:auto;">
+          <table class="sec-table" id="tbl-client-type">
+            <thead>
+              <tr>
+                <th style="min-width:160px;text-align:left;">Client Type</th>
+                <th>No. of Clients / Entities</th>
+                <th>Ending Value (HTM) GHS</th>
+                <th>Market Value (MTM) GHS</th>
+                <th>Value of Redemption GHS</th>
+                <th>Value of Subscription GHS</th>
+                <th>Effective Mgt Fees GHS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ct in client_types %}
+              {% set key = ct.replace(' ','_').replace('-','_') %}
+              {% set row = ct_map.get(ct) %}
+              <tr>
+                <td class="row-label">{{ ct }}</td>
+                <td><input class="sec-input int-input ct-no"
+                           name="ct_no_{{ key }}" type="number" min="0"
+                           value="{{ row.no_clients if row else 0 }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}
+                           oninput="calcTotals('tbl-client-type')"></td>
+                <td><input class="sec-input ct-htm"
+                           name="ct_htm_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.htm_value or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}
+                           oninput="calcTotals('tbl-client-type')"></td>
+                <td><input class="sec-input ct-mtm"
+                           name="ct_mtm_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.mtm_value or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}
+                           oninput="calcTotals('tbl-client-type')"></td>
+                <td><input class="sec-input"
+                           name="ct_red_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.value_redemption or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}></td>
+                <td><input class="sec-input"
+                           name="ct_sub_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.value_subscription or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}></td>
+                <td><input class="sec-input"
+                           name="ct_fee_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.effective_mgt_fees or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr class="total-row" id="tbl-client-type-total">
+                <td class="row-label">TOTAL</td>
+                <td id="ct-tot-no"   style="text-align:center;padding:8px 10px;">0</td>
+                <td id="ct-tot-htm"  style="text-align:right;padding:8px 10px;">0.00</td>
+                <td id="ct-tot-mtm"  style="text-align:right;padding:8px 10px;">0.00</td>
+                <td id="ct-tot-red"  style="text-align:right;padding:8px 10px;">0.00</td>
+                <td id="ct-tot-sub"  style="text-align:right;padding:8px 10px;">0.00</td>
+                <td id="ct-tot-fee"  style="text-align:right;padding:8px 10px;">0.00</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        {% if report.status != 'SUBMITTED' %}
+        <div class="section-save-row">
+          <button type="submit" class="btn btn-primary">💾 Save Client Type Summary</button>
+        </div>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TAB 2: CLIENT CLASSIFICATION
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div id="panel-client-class" class="sec-panel">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:0.3rem;">Client Classification</div>
+      <p class="divider-label">All values in GHS — HTM and MTM totals shown below the table</p>
+
+      {% set cc_map = {} %}
+      {% for row in report.client_class_rows %}
+        {% if cc_map.update({row.classification: row}) %}{% endif %}
+      {% endfor %}
+
+      <form method="POST" action="{{ url_for('sec.save_client_class', report_id=report.id) }}">
+        <div style="overflow-x:auto;">
+          <table class="sec-table" id="tbl-client-class">
+            <thead>
+              <tr>
+                <th style="min-width:140px;text-align:left;">Classification</th>
+                <th>No. of Clients</th>
+                <th>Ending Value (HTM) GHS</th>
+                <th>Market Value (MTM) GHS</th>
+                <th>Value of Redemption GHS</th>
+                <th>Value of Subscription GHS</th>
+                <th>Effective Mgt Fees GHS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for cc in classifications %}
+              {% set key = cc.replace(' ','_').replace('-','_') %}
+              {% set row = cc_map.get(cc) %}
+              <tr>
+                <td class="row-label">{{ cc }}</td>
+                <td><input class="sec-input int-input cc-no"
+                           name="cc_no_{{ key }}" type="number" min="0"
+                           value="{{ row.no_clients if row else 0 }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}
+                           oninput="calcTotals('tbl-client-class')"></td>
+                <td><input class="sec-input cc-htm"
+                           name="cc_htm_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.htm_value or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}
+                           oninput="calcTotals('tbl-client-class')"></td>
+                <td><input class="sec-input cc-mtm"
+                           name="cc_mtm_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.mtm_value or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}
+                           oninput="calcTotals('tbl-client-class')"></td>
+                <td><input class="sec-input"
+                           name="cc_red_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.value_redemption or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}></td>
+                <td><input class="sec-input"
+                           name="cc_sub_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.value_subscription or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}></td>
+                <td><input class="sec-input"
+                           name="cc_fee_{{ key }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.effective_mgt_fees or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td class="row-label">TOTAL</td>
+                <td id="cc-tot-no"  style="text-align:center;padding:8px 10px;">0</td>
+                <td id="cc-tot-htm" style="text-align:right;padding:8px 10px;">0.00</td>
+                <td id="cc-tot-mtm" style="text-align:right;padding:8px 10px;">0.00</td>
+                <td id="cc-tot-red" style="text-align:right;padding:8px 10px;">0.00</td>
+                <td id="cc-tot-sub" style="text-align:right;padding:8px 10px;">0.00</td>
+                <td id="cc-tot-fee" style="text-align:right;padding:8px 10px;">0.00</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- HTM / MTM placement summary -->
+        <div style="display:flex;gap:2rem;margin-top:0.8rem;padding:0.8rem 1rem;
+                    background:rgba(201,168,76,0.06);border-radius:6px;border:1px solid rgba(201,168,76,0.15);">
+          <div>
+            <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--grey);">HTM Placement Total</span>
+            <div id="cc-htm-placement" style="font-size:18px;font-weight:700;color:var(--gold);font-family:var(--font-mono);">GHS 0.00</div>
+          </div>
+          <div>
+            <span style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:var(--grey);">MTM Placement Total</span>
+            <div id="cc-mtm-placement" style="font-size:18px;font-weight:700;color:var(--green);font-family:var(--font-mono);">GHS 0.00</div>
+          </div>
+        </div>
+
+        {% if report.status != 'SUBMITTED' %}
+        <div class="section-save-row">
+          <button type="submit" class="btn btn-primary">💾 Save Client Classification</button>
+        </div>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TAB 3: PORTFOLIO HOLDINGS
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div id="panel-portfolio" class="sec-panel">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:0.3rem;">Portfolio Holdings</div>
+      <p class="divider-label">Current and previous period HTM amounts in GHS</p>
+
+      {% set ph_map = {} %}
+      {% for row in report.portfolio_holdings %}
+        {% if ph_map.update({row.security_type: row}) %}{% endif %}
+      {% endfor %}
+
+      <form method="POST" action="{{ url_for('sec.save_portfolio', report_id=report.id) }}">
+        <div style="overflow-x:auto;">
+          <table class="sec-table" id="tbl-portfolio" style="max-width:700px;">
+            <thead>
+              <tr>
+                <th style="min-width:260px;text-align:left;">Security Type</th>
+                <th style="min-width:180px;">Current Amount (HTM) GHS</th>
+                <th style="min-width:180px;">Previous Amount (HTM) GHS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for sec in securities %}
+              {% set row = ph_map.get(sec) %}
+              <tr>
+                <td class="row-label">{{ sec }}</td>
+                <td><input class="sec-input ph-cur"
+                           name="ph_cur_{{ loop.index0 }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.current_htm or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}
+                           oninput="calcPortfolioTotals()"></td>
+                <td><input class="sec-input ph-prev"
+                           name="ph_prev_{{ loop.index0 }}" type="number" step="0.01" min="0"
+                           value="{{ '%.2f'|format(row.previous_htm or 0) if row else '0.00' }}"
+                           {% if report.status == 'SUBMITTED' %}readonly{% endif %}
+                           oninput="calcPortfolioTotals()"></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td class="row-label">TOTAL</td>
+                <td id="ph-tot-cur"  style="text-align:right;padding:8px 10px;">0.00</td>
+                <td id="ph-tot-prev" style="text-align:right;padding:8px 10px;">0.00</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        {% if report.status != 'SUBMITTED' %}
+        <div class="section-save-row">
+          <button type="submit" class="btn btn-primary">💾 Save Portfolio Holdings</button>
+        </div>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TAB 4: CIS INFLOW
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div id="panel-cis-inflow" class="sec-panel">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:0.3rem;">CIS Interconnectedness — Inflow Report</div>
+      <p class="divider-label">Net Inflow/Outflow and Balance FUM are auto-calculated</p>
+
+      <!-- Entry / Edit Form -->
+      {% if report.status != 'SUBMITTED' %}
+      <form method="POST" action="{{ url_for('sec.save_cis_inflow', report_id=report.id) }}"
+            id="form-cis-inflow">
+        <input type="hidden" name="rec_id" id="inflow-rec-id" value="">
+        <div class="cis-form-grid">
+          <div class="form-group" style="grid-column: span 2;">
+            <label>Regulatory Body</label>
+            <select name="regulatory_body" id="inflow-reg-body" required>
+              <option value="">— Select —</option>
+              {% for rb in reg_bodies %}
+              <option value="{{ rb }}">{{ rb }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="grid-column: span 2;">
+            <label>Customer Category</label>
+            <input type="text" name="customer_category" id="inflow-cat"
+                   placeholder="e.g. Pension Funds, Insurance Companies…">
+          </div>
+          <div class="form-group">
+            <label>No. in Client Category</label>
+            <input type="number" name="no_clients" id="inflow-no" min="0" value="0">
+          </div>
+          <div class="form-group">
+            <label>Beginning FUM (GHS)</label>
+            <input type="number" name="beginning_fum" id="inflow-beg"
+                   step="0.01" min="0" value="0" oninput="calcInflowAuto()">
+          </div>
+          <div class="form-group">
+            <label>Total Inflow (GHS)</label>
+            <input type="number" name="total_inflow" id="inflow-in"
+                   step="0.01" min="0" value="0" oninput="calcInflowAuto()">
+          </div>
+          <div class="form-group">
+            <label>Total Outflow (GHS)</label>
+            <input type="number" name="total_outflow" id="inflow-out"
+                   step="0.01" min="0" value="0" oninput="calcInflowAuto()">
+          </div>
+          <div class="form-group">
+            <label>Total Gains / Loss (GHS)</label>
+            <input type="number" name="total_gains_loss" id="inflow-gl"
+                   step="0.01" value="0" oninput="calcInflowAuto()">
+          </div>
+          <div class="form-group">
+            <label>Net Inflow / Outflow (auto)</label>
+            <input type="text" id="inflow-net" class="calc-field" readonly value="0.00">
+          </div>
+          <div class="form-group">
+            <label>Balance FUM (auto)</label>
+            <input type="text" id="inflow-bal" class="calc-field" readonly value="0.00">
+          </div>
+        </div>
+        <div style="display:flex;gap:0.6rem;align-items:center;">
+          <button type="submit" class="btn btn-primary">💾 Save Record</button>
+          <button type="button" class="btn btn-secondary" onclick="resetInflowForm()">✕ Clear</button>
+        </div>
+      </form>
+      {% endif %}
+
+      <!-- Results Table -->
+      {% if report.cis_inflows %}
+      <div style="margin-top:1.5rem;">
+        <p class="divider-label">Saved Records ({{ report.cis_inflows|length }})</p>
+        <div style="overflow-x:auto;">
+          <table class="cis-results-table">
+            <thead>
+              <tr>
+                <th>Regulatory Body</th>
+                <th>Customer Category</th>
+                <th>No.</th>
+                <th>Beginning FUM</th>
+                <th>Total Inflow</th>
+                <th>Total Outflow</th>
+                <th>Gains/Loss</th>
+                <th>Net In/Out</th>
+                <th>Balance FUM</th>
+                {% if report.status != 'SUBMITTED' %}<th></th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for rec in report.cis_inflows %}
+              <tr>
+                <td>{{ rec.regulatory_body }}</td>
+                <td>{{ rec.customer_category or '—' }}</td>
+                <td class="num">{{ rec.no_clients or 0 }}</td>
+                <td class="num">{{ '{:,.2f}'.format(rec.beginning_fum or 0) }}</td>
+                <td class="num">{{ '{:,.2f}'.format(rec.total_inflow or 0) }}</td>
+                <td class="num">{{ '{:,.2f}'.format(rec.total_outflow or 0) }}</td>
+                <td class="num {% if (rec.total_gains_loss or 0) >= 0 %}pos{% else %}neg{% endif %}">
+                  {{ '{:,.2f}'.format(rec.total_gains_loss or 0) }}</td>
+                <td class="num {% if rec.net_inflow_outflow >= 0 %}pos{% else %}neg{% endif %}">
+                  {{ '{:,.2f}'.format(rec.net_inflow_outflow) }}</td>
+                <td class="num">{{ '{:,.2f}'.format(rec.balance_fum) }}</td>
+                {% if report.status != 'SUBMITTED' %}
+                <td style="white-space:nowrap;">
+                  <button class="edit-btn" onclick="editInflowRecord(
+                    {{ rec.id }},
+                    '{{ rec.regulatory_body|replace("'","\\'") }}',
+                    '{{ (rec.customer_category or '')|replace("'","\\'") }}',
+                    {{ rec.no_clients or 0 }},
+                    {{ rec.beginning_fum or 0 }},
+                    {{ rec.total_inflow or 0 }},
+                    {{ rec.total_outflow or 0 }},
+                    {{ rec.total_gains_loss or 0 }}
+                  )">Edit</button>
+                  <form method="POST" style="display:inline;"
+                        action="{{ url_for('sec.delete_cis_inflow', report_id=report.id, rec_id=rec.id) }}"
+                        onsubmit="return confirm('Delete this record?')">
+                    <button type="submit" class="delete-btn">Delete</button>
+                  </form>
+                </td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <p style="color:var(--grey);font-size:12px;margin-top:1rem;">No inflow records yet. Use the form above to add records.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       TAB 5: CIS OUTFLOW
+  ══════════════════════════════════════════════════════════════════════════ -->
+  <div id="panel-cis-outflow" class="sec-panel">
+    <div class="card">
+      <div class="card-title" style="margin-bottom:0.3rem;">CIS Interconnectedness — Outflow Report</div>
+      <p class="divider-label">Net Inflow/Outflow and Total FUM at End are auto-calculated</p>
+
+      <!-- Entry / Edit Form -->
+      {% if report.status != 'SUBMITTED' %}
+      <form method="POST" action="{{ url_for('sec.save_cis_outflow', report_id=report.id) }}"
+            id="form-cis-outflow">
+        <input type="hidden" name="rec_id" id="outflow-rec-id" value="">
+        <div class="cis-form-grid">
+          <div class="form-group" style="grid-column: span 2;">
+            <label>Regulatory Body</label>
+            <select name="regulatory_body" id="outflow-reg-body" required>
+              <option value="">— Select —</option>
+              {% for rb in reg_bodies %}
+              <option value="{{ rb }}">{{ rb }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group" style="grid-column: span 2;">
+            <label>Customer Category</label>
+            <input type="text" name="customer_category" id="outflow-cat"
+                   placeholder="e.g. Pension Funds, Insurance Companies…">
+          </div>
+          <div class="form-group">
+            <label>Total FUM at Beginning of Period (GHS)</label>
+            <input type="number" name="total_fum_beginning" id="outflow-beg"
+                   step="0.01" min="0" value="0" oninput="calcOutflowAuto()">
+          </div>
+          <div class="form-group">
+            <label>Fund Outflow During Period (GHS)</label>
+            <input type="number" name="fund_outflow" id="outflow-out"
+                   step="0.01" min="0" value="0" oninput="calcOutflowAuto()">
+          </div>
+          <div class="form-group">
+            <label>Total Repayments on Fund (GHS)</label>
+            <input type="number" name="total_repayments" id="outflow-rep"
+                   step="0.01" min="0" value="0" oninput="calcOutflowAuto()">
+          </div>
+          <div class="form-group">
+            <label>Gains / Loss (GHS)</label>
+            <input type="number" name="gains_loss" id="outflow-gl"
+                   step="0.01" value="0" oninput="calcOutflowAuto()">
+          </div>
+          <div class="form-group">
+            <label>Net Inflow / Outflow (auto)</label>
+            <input type="text" id="outflow-net" class="calc-field" readonly value="0.00">
+          </div>
+          <div class="form-group">
+            <label>Total FUM at End of Period (auto)</label>
+            <input type="text" id="outflow-end" class="calc-field" readonly value="0.00">
+          </div>
+        </div>
+        <div style="display:flex;gap:0.6rem;align-items:center;">
+          <button type="submit" class="btn btn-primary">💾 Save Record</button>
+          <button type="button" class="btn btn-secondary" onclick="resetOutflowForm()">✕ Clear</button>
+        </div>
+      </form>
+      {% endif %}
+
+      <!-- Results Table -->
+      {% if report.cis_outflows %}
+      <div style="margin-top:1.5rem;">
+        <p class="divider-label">Saved Records ({{ report.cis_outflows|length }})</p>
+        <div style="overflow-x:auto;">
+          <table class="cis-results-table">
+            <thead>
+              <tr>
+                <th>Regulatory Body</th>
+                <th>Customer Category</th>
+                <th>FUM Beginning</th>
+                <th>Fund Outflow</th>
+                <th>Total Repayments</th>
+                <th>Gains/Loss</th>
+                <th>Net In/Out</th>
+                <th>FUM End of Period</th>
+                {% if report.status != 'SUBMITTED' %}<th></th>{% endif %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for rec in report.cis_outflows %}
+              <tr>
+                <td>{{ rec.regulatory_body }}</td>
+                <td>{{ rec.customer_category or '—' }}</td>
+                <td class="num">{{ '{:,.2f}'.format(rec.total_fum_beginning or 0) }}</td>
+                <td class="num">{{ '{:,.2f}'.format(rec.fund_outflow or 0) }}</td>
+                <td class="num">{{ '{:,.2f}'.format(rec.total_repayments or 0) }}</td>
+                <td class="num {% if (rec.gains_loss or 0) >= 0 %}pos{% else %}neg{% endif %}">
+                  {{ '{:,.2f}'.format(rec.gains_loss or 0) }}</td>
+                <td class="num {% if rec.net_inflow_outflow >= 0 %}pos{% else %}neg{% endif %}">
+                  {{ '{:,.2f}'.format(rec.net_inflow_outflow) }}</td>
+                <td class="num">{{ '{:,.2f}'.format(rec.total_fum_end) }}</td>
+                {% if report.status != 'SUBMITTED' %}
+                <td style="white-space:nowrap;">
+                  <button class="edit-btn" onclick="editOutflowRecord(
+                    {{ rec.id }},
+                    '{{ rec.regulatory_body|replace("'","\\'") }}',
+                    '{{ (rec.customer_category or '')|replace("'","\\'") }}',
+                    {{ rec.total_fum_beginning or 0 }},
+                    {{ rec.fund_outflow or 0 }},
+                    {{ rec.total_repayments or 0 }},
+                    {{ rec.gains_loss or 0 }}
+                  )">Edit</button>
+                  <form method="POST" style="display:inline;"
+                        action="{{ url_for('sec.delete_cis_outflow', report_id=report.id, rec_id=rec.id) }}"
+                        onsubmit="return confirm('Delete this record?')">
+                    <button type="submit" class="delete-btn">Delete</button>
+                  </form>
+                </td>
+                {% endif %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <p style="color:var(--grey);font-size:12px;margin-top:1rem;">No outflow records yet. Use the form above to add records.</p>
+      {% endif %}
+    </div>
+  </div>
+
+</div><!-- /page-content -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── TAB NAVIGATION ─────────────────────────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('.sec-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sec-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// Restore active tab from URL hash
+(function() {
+  const hash = location.hash.replace('#tab-','');
+  const map = {
+    'client-type':  0, 'client-class': 1, 'portfolio': 2,
+    'cis-inflow':   3, 'cis-outflow':  4
+  };
+  if (hash && map[hash] !== undefined) {
+    const tabs = document.querySelectorAll('.sec-tab');
+    if (tabs[map[hash]]) tabs[map[hash]].click();
+  }
+})();
+
+// ── GENERIC TABLE TOTALS ────────────────────────────────────────────────────
+function calcTotals(tableId) {
+  const tbl    = document.getElementById(tableId);
+  const prefix = tableId === 'tbl-client-type' ? 'ct' : 'cc';
+  const rows   = tbl.querySelectorAll('tbody tr');
+  let totNo = 0, totHtm = 0, totMtm = 0, totRed = 0, totSub = 0, totFee = 0;
+
+  rows.forEach(r => {
+    const inputs = r.querySelectorAll('input');
+    totNo  += parseNum(inputs[0]);
+    totHtm += parseNum(inputs[1]);
+    totMtm += parseNum(inputs[2]);
+    totRed += parseNum(inputs[3]);
+    totSub += parseNum(inputs[4]);
+    totFee += parseNum(inputs[5]);
+  });
+
+  setText(`${prefix}-tot-no`,  fmtInt(totNo));
+  setText(`${prefix}-tot-htm`, fmt(totHtm));
+  setText(`${prefix}-tot-mtm`, fmt(totMtm));
+  setText(`${prefix}-tot-red`, fmt(totRed));
+  setText(`${prefix}-tot-sub`, fmt(totSub));
+  setText(`${prefix}-tot-fee`, fmt(totFee));
+
+  // HTM / MTM placement display (client class only)
+  if (prefix === 'cc') {
+    setHTML('cc-htm-placement', `GHS ${fmtMoney(totHtm)}`);
+    setHTML('cc-mtm-placement', `GHS ${fmtMoney(totMtm)}`);
+  }
+}
+
+function calcPortfolioTotals() {
+  const tbl = document.getElementById('tbl-portfolio');
+  let totCur = 0, totPrev = 0;
+  tbl.querySelectorAll('tbody tr').forEach(r => {
+    const inp = r.querySelectorAll('input');
+    totCur  += parseNum(inp[0]);
+    totPrev += parseNum(inp[1]);
+  });
+  setText('ph-tot-cur',  fmt(totCur));
+  setText('ph-tot-prev', fmt(totPrev));
+}
+
+// ── CIS INFLOW AUTO-CALC ────────────────────────────────────────────────────
+function calcInflowAuto() {
+  const beg = val('inflow-beg');
+  const inn = val('inflow-in');
+  const out = val('inflow-out');
+  const gl  = val('inflow-gl');
+  const net = inn - out;
+  const bal = beg + inn - out + gl;
+  document.getElementById('inflow-net').value = fmt(net);
+  document.getElementById('inflow-bal').value = fmt(bal);
+}
+
+function editInflowRecord(id, rb, cat, no, beg, inn, out, gl) {
+  document.getElementById('inflow-rec-id').value  = id;
+  document.getElementById('inflow-reg-body').value = rb;
+  document.getElementById('inflow-cat').value      = cat;
+  document.getElementById('inflow-no').value       = no;
+  document.getElementById('inflow-beg').value      = beg;
+  document.getElementById('inflow-in').value       = inn;
+  document.getElementById('inflow-out').value      = out;
+  document.getElementById('inflow-gl').value       = gl;
+  calcInflowAuto();
+  document.getElementById('form-cis-inflow').scrollIntoView({behavior:'smooth'});
+}
+
+function resetInflowForm() {
+  ['inflow-rec-id','inflow-cat'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('inflow-reg-body').value = '';
+  ['inflow-no','inflow-beg','inflow-in','inflow-out','inflow-gl'].forEach(id =>
+    document.getElementById(id).value = 0);
+  calcInflowAuto();
+}
+
+// ── CIS OUTFLOW AUTO-CALC ───────────────────────────────────────────────────
+function calcOutflowAuto() {
+  const beg = val('outflow-beg');
+  const out = val('outflow-out');
+  const rep = val('outflow-rep');
+  const gl  = val('outflow-gl');
+  const net = rep - out;
+  const end = beg - out + rep + gl;
+  document.getElementById('outflow-net').value = fmt(net);
+  document.getElementById('outflow-end').value = fmt(end);
+}
+
+function editOutflowRecord(id, rb, cat, beg, out, rep, gl) {
+  document.getElementById('outflow-rec-id').value   = id;
+  document.getElementById('outflow-reg-body').value = rb;
+  document.getElementById('outflow-cat').value      = cat;
+  document.getElementById('outflow-beg').value      = beg;
+  document.getElementById('outflow-out').value      = out;
+  document.getElementById('outflow-rep').value      = rep;
+  document.getElementById('outflow-gl').value       = gl;
+  calcOutflowAuto();
+  document.getElementById('form-cis-outflow').scrollIntoView({behavior:'smooth'});
+}
+
+function resetOutflowForm() {
+  ['outflow-rec-id','outflow-cat'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('outflow-reg-body').value = '';
+  ['outflow-beg','outflow-out','outflow-rep','outflow-gl'].forEach(id =>
+    document.getElementById(id).value = 0);
+  calcOutflowAuto();
+}
+
+// ── HELPERS ─────────────────────────────────────────────────────────────────
+function parseNum(el) { return parseFloat(el ? el.value || 0 : 0) || 0; }
+function val(id)      { return parseFloat(document.getElementById(id).value || 0) || 0; }
+function fmt(n)       { return n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function fmtInt(n)    { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function fmtMoney(n)  { return n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function setText(id, v) { const el = document.getElementById(id); if(el) el.textContent = v; }
+function setHTML(id, v) { const el = document.getElementById(id); if(el) el.innerHTML = v; }
+
+// ── INIT — compute totals from existing values on page load ─────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  calcTotals('tbl-client-type');
+  calcTotals('tbl-client-class');
+  calcPortfolioTotals();
+  calcInflowAuto();
+  calcOutflowAuto();
+});
+</script>
+{% endblock %}

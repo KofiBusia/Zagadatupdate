@@ -1,7 +1,7 @@
 from flask import Blueprint, send_file, request, redirect, url_for, flash, render_template
 from flask_login import login_required, current_user
 from models import ClientAccount, Investment, Transaction
-from reports.pdf_reports import generate_pvr, generate_statement, generate_global_report
+from reports.pdf_reports import generate_pvr, generate_statement, generate_global_report, tbl_style, lhf, DARK, GOLD, WHITE, LIGHT, GREEN, RED, GREY, DARK2
 from datetime import datetime, date
 import io
 
@@ -17,7 +17,19 @@ def _parse_date(s):
 @reports_bp.route('/pvr/<account_number>')
 @login_required
 def pvr(account_number):
-    currency = request.args.get('currency', 'GHS')
+    """Portfolio Valuation Report — accessible by admin and the account's own client."""
+    from flask import session
+    from models import ClientAccount
+    # Client access: only own account
+    if session.get('user_type') == 'client':
+        if current_user.account_number != account_number:
+            flash('Access denied.', 'error')
+            return redirect(url_for('user.dashboard'))
+    currency = request.args.get('currency', 'GHS').upper()
+    # Validate currency
+    valid_currencies = ['GHS','USD','EUR','GBP','CNY','NGN']
+    if currency not in valid_currencies:
+        currency = 'GHS'
     try:
         buf = generate_pvr(account_number, currency)
         fname = f'PVR_{account_number.replace("-","_")}_{date.today().strftime("%Y-%m-%d")}_{currency}.pdf'
@@ -26,30 +38,47 @@ def pvr(account_number):
                          download_name=fname)
     except Exception as e:
         flash(f'Report error: {e}', 'error')
-        return redirect(request.referrer or url_for('admin.dashboard'))
+        redirect_url = url_for('user.dashboard') if session.get('user_type') == 'client' else url_for('admin.dashboard')
+        return redirect(request.referrer or redirect_url)
 
 @reports_bp.route('/statement/<account_number>')
 @login_required
 def statement(account_number):
+    """Transaction Statement — admin or own client; supports currency conversion."""
+    from flask import session
+    from models import ClientAccount
+    if session.get('user_type') == 'client':
+        if current_user.account_number != account_number:
+            flash('Access denied.', 'error')
+            return redirect(url_for('user.dashboard'))
     date_from = _parse_date(request.args.get('from'))
     date_to   = _parse_date(request.args.get('to'))
+    currency  = request.args.get('currency', 'GHS').upper()
+    valid_currencies = ['GHS','USD','EUR','GBP','CNY','NGN']
+    if currency not in valid_currencies:
+        currency = 'GHS'
     try:
-        buf = generate_statement(account_number, date_from, date_to)
-        fname = f'Statement_{account_number.replace("-","_")}_{date.today().strftime("%Y-%m-%d")}.pdf'
+        buf = generate_statement(account_number, date_from, date_to, currency=currency)
+        fname = f'Statement_{account_number.replace("-","_")}_{date.today().strftime("%Y-%m-%d")}_{currency}.pdf'
         return send_file(buf, mimetype='application/pdf',
                          as_attachment=request.args.get('download') == '1',
                          download_name=fname)
     except Exception as e:
-        flash(f'Report error: {e}', 'error')
-        return redirect(request.referrer or url_for('admin.dashboard'))
+        flash(f'Statement error: {e}', 'error')
+        redirect_url = url_for('user.dashboard') if session.get('user_type') == 'client' else url_for('admin.dashboard')
+        return redirect(request.referrer or redirect_url)
 
 @reports_bp.route('/global')
 @login_required
 def global_report():
     asset_class = request.args.get('asset_class')
+    currency    = request.args.get('currency', 'GHS').upper()
+    valid_currencies = ['GHS','USD','EUR','GBP','CNY','NGN']
+    if currency not in valid_currencies:
+        currency = 'GHS'
     try:
-        buf = generate_global_report(asset_class)
-        fname = f'GlobalReport_{date.today().strftime("%Y-%m-%d")}.pdf'
+        buf = generate_global_report(asset_class, currency=currency)
+        fname = f'GlobalReport_{date.today().strftime("%Y-%m-%d")}_{currency}.pdf'
         return send_file(buf, mimetype='application/pdf',
                          as_attachment=request.args.get('download') == '1',
                          download_name=fname)
@@ -71,7 +100,7 @@ def fees_report():
     from reportlab.lib import colors
     from reportlab.lib.units import cm
     from reportlab.lib.pagesizes import A4, landscape
-    from reports.pdf_reports import summary_table_style, total_row_style, header_footer, NumberedCanvas, make_styles, DARK, GOLD, WHITE, LIGHT
+    from reports.pdf_reports import make_styles, tbl_style, lhf
     from datetime import date
     import io
 
@@ -103,10 +132,9 @@ def fees_report():
     sum_rows.append(['TOTAL', f'{total_fees:,.2f}', str(len(fee_txns))])
     t_idx = len(sum_rows) - 1
     tbl = Table(sum_rows, colWidths=[8*cm, 7*cm, 4*cm])
-    ts = summary_table_style()
+    ts = tbl_style()
     ts.add('ALIGN', (1,0), (-1,-1), 'RIGHT')
-    for ext in total_row_style(t_idx):
-        ts.add(*ext)
+    
     tbl.setStyle(ts)
     story.append(Paragraph('SUMMARY BY FEE TYPE', S['section']))
     story.append(tbl)
@@ -131,10 +159,9 @@ def fees_report():
     t2_idx = len(det_rows) - 1
     cw2 = [2.5*cm, 2.5*cm, 5*cm, 4*cm, 4*cm, 2.5*cm, 3.5*cm, 5.5*cm]
     tbl2 = Table(det_rows, colWidths=cw2, repeatRows=1)
-    ts2 = summary_table_style()
+    ts2 = tbl_style()
     ts2.add('ALIGN', (4,0), (6,-1), 'RIGHT')
-    for ext in total_row_style(t2_idx):
-        ts2.add(*ext)
+    
     tbl2.setStyle(ts2)
     story.append(Paragraph('DETAIL — ALL FEE CHARGES', S['section']))
     story.append(tbl2)
@@ -161,7 +188,7 @@ def fees_report():
         c.drawString(0.8*cm, 0.45*cm, 'ZAGADAT CAPITAL — CONFIDENTIAL')
         c.restoreState()
 
-    doc.build(story, onFirstPage=lhf, onLaterPages=lhf, canvasmaker=NumberedCanvas)
+    doc.build(story, onFirstPage=lhf, onLaterPages=lhf, )
     buf.seek(0)
     fname = f'FeesReport_{date.today().strftime("%Y-%m-%d")}.pdf'
     return send_file(buf, mimetype='application/pdf',
